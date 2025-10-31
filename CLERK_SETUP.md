@@ -31,11 +31,7 @@ In your Clerk dashboard:
 
 1. Go to **Sessions** settings
 2. Make sure **JWT Templates** are configured (default template is fine)
-3. Go to **Paths** settings and configure:
-   - Sign-in URL: `/sign-in`
-   - Sign-up URL: `/sign-up`
-   - After sign-in: `/`
-   - After sign-out: `/sign-in`
+3. No additional path configuration needed - the application uses Clerk's hosted Account Portal for authentication
 
 ## 5. Start the Server
 
@@ -46,16 +42,16 @@ npm run dev
 ## 6. Test Authentication
 
 1. Navigate to `http://localhost:3000`
-2. You should be redirected to the sign-in page
-3. Click "Sign up" to create a new account
-4. After signing up, you'll be redirected to the main MDM dashboard
+2. You should be redirected to Clerk's hosted sign-in page
+3. Create a new account or sign in with existing credentials
+4. After signing in, you'll be redirected back to the main MDM dashboard
 5. You should see your name in the header with a "Sign Out" button
 
 ## Features
 
 - **Protected API Endpoints**: All `/api/*` routes require authentication
 - **Session Management**: Uses Clerk's JWT tokens for secure authentication
-- **Sign In/Sign Up**: Pre-built Clerk UI components
+- **Hosted Authentication**: Uses Clerk's Account Portal for sign-in/sign-up (no custom auth pages)
 - **Sign Out**: Users can sign out from the main dashboard
 
 ## Security Notes

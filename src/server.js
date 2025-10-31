@@ -24,15 +24,6 @@ app.get('/api/clerk-config', (req, res) => {
 // Routes
 app.use('/api', mdmRoutes);
 
-// Authentication routes
-app.get('/sign-in', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/sign-in.html'));
-});
-
-app.get('/sign-up', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/sign-up.html'));
-});
-
 // Root route
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
