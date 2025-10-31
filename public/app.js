@@ -342,7 +342,12 @@ function formatBytes(bytes) {
   return `${mb.toFixed(2)} MB`;
 }
 
-// Load devices on page load
-window.addEventListener('load', () => {
-  refreshDevicesBtn.click();
-});
+// Load devices function - will be called after Clerk is initialized
+function loadDevicesOnReady() {
+  if (refreshDevicesBtn) {
+    refreshDevicesBtn.click();
+  }
+}
+
+// Make it globally accessible so index.html can call it after Clerk loads
+window.loadDevicesOnReady = loadDevicesOnReady;

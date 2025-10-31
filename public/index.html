@@ -136,6 +136,11 @@
           afterSignOutUrl: '/',
         });
 
+        // Load devices after Clerk is fully initialized
+        if (window.loadDevicesOnReady) {
+          window.loadDevicesOnReady();
+        }
+
       } catch (error) {
         console.error('Error loading Clerk:', error);
         alert('Failed to load authentication. Please refresh the page.');
