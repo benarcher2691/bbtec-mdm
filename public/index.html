@@ -20,7 +20,7 @@
         </div>
         <div class="user-menu">
           <span id="user-name"></span>
-          <button id="sign-out-btn" class="btn btn-secondary" style="margin-left: 15px;">Sign Out</button>
+          <div id="user-button-mount" style="margin-left: 15px;"></div>
         </div>
       </div>
     </header>
@@ -130,10 +130,10 @@
           return await window.Clerk.session.getToken();
         };
 
-        // Sign out handler
-        document.getElementById('sign-out-btn').addEventListener('click', async () => {
-          await window.Clerk.signOut();
-          window.Clerk.redirectToSignIn();
+        // Mount Clerk UserButton component for user management
+        const userButtonDiv = document.getElementById('user-button-mount');
+        window.Clerk.mountUserButton(userButtonDiv, {
+          afterSignOutUrl: '/',
         });
 
       } catch (error) {

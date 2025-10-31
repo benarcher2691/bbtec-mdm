@@ -45,14 +45,23 @@ npm run dev
 2. You should be redirected to Clerk's hosted sign-in page
 3. Create a new account or sign in with existing credentials
 4. After signing in, you'll be redirected back to the main MDM dashboard
-5. You should see your name in the header with a "Sign Out" button
+5. You should see your name in the header with a user avatar button
+6. Click the user avatar to access:
+   - Account settings
+   - Password management
+   - Profile updates
+   - Sign out option
 
 ## Features
 
 - **Protected API Endpoints**: All `/api/*` routes require authentication
 - **Session Management**: Uses Clerk's JWT tokens for secure authentication
 - **Hosted Authentication**: Uses Clerk's Account Portal for sign-in/sign-up (no custom auth pages)
-- **Sign Out**: Users can sign out from the main dashboard
+- **User Management**: Clerk UserButton component provides:
+  - Sign out functionality
+  - Password updates
+  - Profile management
+  - Account settings
 
 ## Security Notes
 

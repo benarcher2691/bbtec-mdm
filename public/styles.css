@@ -46,11 +46,24 @@ header p {
   align-items: center;
   color: white;
   font-weight: 500;
+  gap: 15px;
 }
 
 #user-name {
   font-size: 1rem;
   opacity: 0.95;
+}
+
+#user-button-mount {
+  display: flex;
+  align-items: center;
+}
+
+/* Style Clerk UserButton to fit with our design */
+#user-button-mount button {
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer;
 }
 
 .card {
