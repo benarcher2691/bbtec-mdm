@@ -7,6 +7,9 @@ const enrollmentResult = document.getElementById('enrollmentResult');
 const qrCodeContainer = document.getElementById('qrCodeContainer');
 const devicesList = document.getElementById('devicesList');
 const policyIdInput = document.getElementById('policyId');
+const deviceModal = document.getElementById('deviceModal');
+const deviceDetailContent = document.getElementById('deviceDetailContent');
+const modalClose = document.querySelector('.close');
 
 // API Base URL
 const API_BASE = '/api';
@@ -139,7 +142,7 @@ refreshDevicesBtn.addEventListener('click', async () => {
       devicesList.innerHTML = '<div class="empty-state">No devices enrolled yet. Scan the QR code above to enroll your first device!</div>';
     } else {
       devicesList.innerHTML = data.devices.map(device => `
-        <div class="device-item">
+        <div class="device-item" onclick="showDeviceDetails('${device.name}')">
           <h3>Device: ${device.name.split('/').pop()}</h3>
           <p><strong>State:</strong> <span class="status ${device.state === 'ACTIVE' ? 'active' : ''}">${device.state || 'Unknown'}</span></p>
           <p><strong>Enrolled:</strong> ${new Date(device.enrollmentTime).toLocaleString()}</p>
@@ -148,6 +151,7 @@ refreshDevicesBtn.addEventListener('click', async () => {
             <p><strong>Device:</strong> ${device.hardwareInfo.manufacturer || 'Unknown'} ${device.hardwareInfo.model || ''}</p>
             <p><strong>Android:</strong> ${device.hardwareInfo.androidVersion || 'Unknown'}</p>
           ` : ''}
+          <p style="margin-top: 10px; color: #667eea; font-weight: 600; font-size: 0.85rem;">Click for detailed information →</p>
         </div>
       `).join('');
     }
@@ -158,6 +162,168 @@ refreshDevicesBtn.addEventListener('click', async () => {
     btn.textContent = originalText;
   }
 });
+
+// Modal Functions
+function openModal() {
+  deviceModal.classList.add('show');
+}
+
+function closeModal() {
+  deviceModal.classList.remove('show');
+}
+
+// Modal event listeners
+modalClose.addEventListener('click', closeModal);
+
+window.addEventListener('click', (event) => {
+  if (event.target === deviceModal) {
+    closeModal();
+  }
+});
+
+// Show device details in modal
+async function showDeviceDetails(deviceName) {
+  openModal();
+  deviceDetailContent.innerHTML = '<div class="loading-spinner">Loading device details...</div>';
+
+  try {
+    // Extract deviceId from the full device name (format: enterprises/{enterpriseId}/devices/{deviceId})
+    const deviceId = deviceName.split('/').pop();
+
+    const response = await fetch(`${API_BASE}/devices/${encodeURIComponent(deviceId)}`);
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to fetch device details');
+    }
+
+    const device = data.device;
+    deviceDetailContent.innerHTML = renderDeviceDetails(device);
+  } catch (error) {
+    deviceDetailContent.innerHTML = `<div class="result error">Error: ${error.message}</div>`;
+  }
+}
+
+// Make function globally accessible for inline onclick handlers
+window.showDeviceDetails = showDeviceDetails;
+
+// Render device details
+function renderDeviceDetails(device) {
+  const hardware = device.hardwareInfo || {};
+  const memory = device.memoryInfo || {};
+  const network = device.networkInfo || {};
+
+  let html = '';
+
+  // Basic Information
+  html += '<div class="device-detail-section">';
+  html += '<h3>📱 Basic Information</h3>';
+  html += '<div class="detail-grid">';
+  html += createDetailItem('Device Name', device.name?.split('/').pop() || 'Unknown');
+  html += createDetailItem('State', device.state || 'Unknown');
+  html += createDetailItem('Management Mode', device.managementMode || 'Unknown');
+  html += createDetailItem('Enrolled', device.enrollmentTime ? new Date(device.enrollmentTime).toLocaleString() : 'Unknown');
+  html += createDetailItem('Last Report', device.lastStatusReportTime ? new Date(device.lastStatusReportTime).toLocaleString() : 'Unknown');
+  html += createDetailItem('Last Policy Sync', device.lastPolicySyncTime ? new Date(device.lastPolicySyncTime).toLocaleString() : 'Unknown');
+  html += '</div></div>';
+
+  // Hardware Information
+  if (hardware && Object.keys(hardware).length > 0) {
+    html += '<div class="device-detail-section">';
+    html += '<h3>💻 Hardware Information</h3>';
+    html += '<div class="detail-grid">';
+    html += createDetailItem('Manufacturer', hardware.manufacturer || 'Unknown');
+    html += createDetailItem('Model', hardware.model || 'Unknown');
+    html += createDetailItem('Brand', hardware.brand || 'Unknown');
+    html += createDetailItem('Serial Number', hardware.serialNumber || 'Unknown');
+    html += createDetailItem('Hardware', hardware.hardware || 'Unknown');
+    html += createDetailItem('Device Type', hardware.deviceBasebandVersion || 'Unknown');
+    html += '</div></div>';
+  }
+
+  // Software Information
+  html += '<div class="device-detail-section">';
+  html += '<h3>⚙️ Software Information</h3>';
+  html += '<div class="detail-grid">';
+  html += createDetailItem('Android Version', hardware.androidVersion || 'Unknown');
+  html += createDetailItem('Android Build Number', hardware.androidBuildNumber || 'Unknown');
+  html += createDetailItem('Security Patch', hardware.securityPatchLevel || 'Unknown');
+  html += createDetailItem('Build Fingerprint', hardware.androidBuildTime ? new Date(hardware.androidBuildTime).toLocaleDateString() : 'Unknown');
+  html += '</div></div>';
+
+  // Memory Information
+  if (memory && Object.keys(memory).length > 0) {
+    html += '<div class="device-detail-section">';
+    html += '<h3>💾 Memory Information</h3>';
+    html += '<div class="detail-grid">';
+    if (memory.totalRam) {
+      html += createDetailItem('Total RAM', formatBytes(memory.totalRam));
+    }
+    if (memory.totalInternalStorage) {
+      html += createDetailItem('Internal Storage', formatBytes(memory.totalInternalStorage));
+    }
+    html += '</div></div>';
+  }
+
+  // Network Information
+  if (network && network.networkOperatorName) {
+    html += '<div class="device-detail-section">';
+    html += '<h3>📡 Network Information</h3>';
+    html += '<div class="detail-grid">';
+    html += createDetailItem('Network Operator', network.networkOperatorName || 'Unknown');
+    if (network.wifiMacAddress) {
+      html += createDetailItem('WiFi MAC Address', network.wifiMacAddress);
+    }
+    if (network.imei) {
+      html += createDetailItem('IMEI', network.imei);
+    }
+    html += '</div></div>';
+  }
+
+  // Display Information
+  if (device.displays && device.displays.length > 0) {
+    const display = device.displays[0];
+    html += '<div class="device-detail-section">';
+    html += '<h3>🖥️ Display Information</h3>';
+    html += '<div class="detail-grid">';
+    html += createDetailItem('Display Name', display.name || 'Unknown');
+    html += createDetailItem('Width', display.width ? `${display.width}px` : 'Unknown');
+    html += createDetailItem('Height', display.height ? `${display.height}px` : 'Unknown');
+    html += createDetailItem('Density', display.density ? `${display.density} dpi` : 'Unknown');
+    html += '</div></div>';
+  }
+
+  // Policy Applied
+  if (device.appliedPolicyName) {
+    html += '<div class="device-detail-section">';
+    html += '<h3>📋 Policy Information</h3>';
+    html += '<div class="detail-grid">';
+    html += createDetailItem('Applied Policy', device.appliedPolicyName.split('/').pop() || 'Unknown');
+    html += createDetailItem('Policy Version', device.appliedPolicyVersion || 'Unknown');
+    html += '</div></div>';
+  }
+
+  return html;
+}
+
+// Helper function to create detail items
+function createDetailItem(label, value) {
+  return `
+    <div class="detail-item">
+      <div class="label">${label}</div>
+      <div class="value">${value || 'N/A'}</div>
+    </div>
+  `;
+}
+
+// Helper function to format bytes
+function formatBytes(bytes) {
+  if (!bytes) return 'Unknown';
+  const gb = bytes / (1024 ** 3);
+  if (gb >= 1) return `${gb.toFixed(2)} GB`;
+  const mb = bytes / (1024 ** 2);
+  return `${mb.toFixed(2)} MB`;
+}
 
 // Load devices on page load
 window.addEventListener('load', () => {
