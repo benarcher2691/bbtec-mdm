@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const mdmController = require('../controllers/mdmController');
+const { requireAuth } = require('../middleware/auth');
+
+// Apply authentication to all routes
+router.use(requireAuth);
 
 // Enterprise management
 router.post('/enterprise/create', mdmController.createEnterprise);

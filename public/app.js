@@ -14,6 +14,23 @@ const modalClose = document.querySelector('.close');
 // API Base URL
 const API_BASE = '/api';
 
+// Authenticated fetch wrapper
+async function authenticatedFetch(url, options = {}) {
+  // Get session token from Clerk
+  const token = await window.getSessionToken();
+
+  // Add Authorization header
+  const headers = {
+    ...options.headers,
+    'Authorization': `Bearer ${token}`,
+  };
+
+  return fetch(url, {
+    ...options,
+    headers,
+  });
+}
+
 // Utility function to show result messages
 function showResult(element, message, isError = false) {
   element.className = `result ${isError ? 'error' : 'success'}`;
@@ -36,7 +53,7 @@ createPolicyBtn.addEventListener('click', async () => {
     btn.textContent = 'Creating Policy...';
     clearResult(policyResult);
 
-    const response = await fetch(`${API_BASE}/policy`, {
+    const response = await authenticatedFetch(`${API_BASE}/policy`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -74,7 +91,7 @@ generateQRBtn.addEventListener('click', async () => {
     qrCodeContainer.classList.remove('visible');
 
     // Step 1: Create enrollment token
-    const tokenResponse = await fetch(`${API_BASE}/enrollment-token`, {
+    const tokenResponse = await authenticatedFetch(`${API_BASE}/enrollment-token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -93,7 +110,7 @@ generateQRBtn.addEventListener('click', async () => {
     const token = tokenData.token;
 
     // Step 2: Generate QR code
-    const qrResponse = await fetch(`${API_BASE}/qr?token=${encodeURIComponent(token)}`);
+    const qrResponse = await authenticatedFetch(`${API_BASE}/qr?token=${encodeURIComponent(token)}`);
     const qrData = await qrResponse.json();
 
     if (!qrResponse.ok || !qrData.success) {
@@ -131,7 +148,7 @@ refreshDevicesBtn.addEventListener('click', async () => {
     btn.disabled = true;
     btn.textContent = 'Loading...';
 
-    const response = await fetch(`${API_BASE}/devices`);
+    const response = await authenticatedFetch(`${API_BASE}/devices`);
     const data = await response.json();
 
     if (!response.ok || !data.success) {
@@ -190,7 +207,7 @@ async function showDeviceDetails(deviceName) {
     // Extract deviceId from the full device name (format: enterprises/{enterpriseId}/devices/{deviceId})
     const deviceId = deviceName.split('/').pop();
 
-    const response = await fetch(`${API_BASE}/devices/${encodeURIComponent(deviceId)}`);
+    const response = await authenticatedFetch(`${API_BASE}/devices/${encodeURIComponent(deviceId)}`);
     const data = await response.json();
 
     if (!response.ok || !data.success) {

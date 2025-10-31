@@ -7,10 +7,22 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <div class="container">
+  <div id="auth-loading" style="display: flex; align-items: center; justify-content: center; min-height: 100vh; color: white; font-size: 1.2rem;">
+    Loading...
+  </div>
+
+  <div class="container" id="main-content" style="display: none;">
     <header>
-      <h1>📱 Educational MDM System</h1>
-      <p>Android Device Enrollment via QR Code</p>
+      <div class="header-content">
+        <div>
+          <h1>📱 Educational MDM System</h1>
+          <p>Android Device Enrollment via QR Code</p>
+        </div>
+        <div class="user-menu">
+          <span id="user-name"></span>
+          <button id="sign-out-btn" class="btn btn-secondary" style="margin-left: 15px;">Sign Out</button>
+        </div>
+      </div>
     </header>
 
     <main>
@@ -79,6 +91,66 @@
       </div>
     </div>
   </div>
+
+  <script type="module">
+    // Load Clerk SDK
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js';
+    script.async = true;
+
+    script.onload = async () => {
+      try {
+        // Get Clerk publishable key from server
+        const response = await fetch('/api/clerk-config');
+        const config = await response.json();
+
+        if (!config.publishableKey) {
+          alert('Clerk is not configured. Please add CLERK_PUBLISHABLE_KEY to your .env file.');
+          return;
+        }
+
+        // Initialize Clerk
+        const clerk = new window.Clerk(config.publishableKey);
+        await clerk.load();
+
+        // Check if user is signed in
+        if (!clerk.user) {
+          window.location.href = '/sign-in';
+          return;
+        }
+
+        // User is authenticated
+        document.getElementById('auth-loading').style.display = 'none';
+        document.getElementById('main-content').style.display = 'block';
+
+        // Display user name
+        const userName = clerk.user.firstName || clerk.user.emailAddresses[0]?.emailAddress || 'User';
+        document.getElementById('user-name').textContent = `Hello, ${userName}`;
+
+        // Store clerk instance and session token globally for API calls
+        window.clerk = clerk;
+        window.getSessionToken = async () => {
+          return await clerk.session.getToken();
+        };
+
+        // Sign out handler
+        document.getElementById('sign-out-btn').addEventListener('click', async () => {
+          await clerk.signOut();
+          window.location.href = '/sign-in';
+        });
+
+      } catch (error) {
+        console.error('Error loading Clerk:', error);
+        alert('Failed to load authentication. Please refresh the page.');
+      }
+    };
+
+    script.onerror = () => {
+      alert('Failed to load authentication library. Please check your internet connection.');
+    };
+
+    document.head.appendChild(script);
+  </script>
 
   <script src="/app.js"></script>
 </body>
