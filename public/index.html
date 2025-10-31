@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Educational MDM - Android Enrollment</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📱 Educational MDM System</h1>
+      <p>Android Device Enrollment via QR Code</p>
+    </header>
+
+    <main>
+      <!-- Policy Creation Section -->
+      <section class="card">
+        <h2>1. Create Policy</h2>
+        <p>First, create a policy that will be applied to enrolled devices.</p>
+        <button id="createPolicyBtn" class="btn btn-primary">Create Default Policy</button>
+        <div id="policyResult" class="result"></div>
+      </section>
+
+      <!-- Enrollment Token Section -->
+      <section class="card">
+        <h2>2. Generate Enrollment QR Code</h2>
+        <p>Generate an enrollment token and QR code for device provisioning.</p>
+        <div class="form-group">
+          <label for="policyId">Policy ID:</label>
+          <input type="text" id="policyId" value="default-policy" />
+        </div>
+        <button id="generateQRBtn" class="btn btn-primary">Generate QR Code</button>
+        <div id="enrollmentResult" class="result"></div>
+        <div id="qrCodeContainer" class="qr-container"></div>
+      </section>
+
+      <!-- Device List Section -->
+      <section class="card">
+        <h2>3. Enrolled Devices</h2>
+        <p>View all devices that have been enrolled in your MDM system.</p>
+        <button id="refreshDevicesBtn" class="btn btn-secondary">Refresh Device List</button>
+        <div id="devicesList" class="devices-list"></div>
+      </section>
+
+      <!-- Instructions Section -->
+      <section class="card instructions">
+        <h2>📖 How to Enroll an Android Device</h2>
+        <ol>
+          <li><strong>Factory Reset</strong> your Android device (or use a new device)</li>
+          <li><strong>Start the setup wizard</strong> - at the welcome screen</li>
+          <li><strong>Tap the screen 6 times</strong> to launch the QR code scanner</li>
+          <li><strong>Connect to Wi-Fi</strong> when prompted</li>
+          <li><strong>Scan the QR code</strong> generated above</li>
+          <li>Wait for the device to download and apply the policy</li>
+          <li>Complete the setup - your device is now enrolled!</li>
+        </ol>
+        <div class="note">
+          <strong>Note:</strong> This requires Android 7.0+ and works best with devices that support QR provisioning.
+          The device will download Google's Android Device Policy app automatically.
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>Built with Android Management API | Educational purposes only</p>
+    </footer>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
