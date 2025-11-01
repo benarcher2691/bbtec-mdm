@@ -2,6 +2,7 @@
 
 import { google } from 'googleapis'
 import { auth } from '@clerk/nextjs/server'
+import QRCode from 'qrcode'
 
 /**
  * Initialize Android Management API client (server-side only)
@@ -45,10 +46,30 @@ export async function createEnrollmentToken(policyId: string = 'default-policy',
       },
     })
 
+    const enrollmentToken = response.data.value || ''
+    const qrCodeContent = response.data.qrCode || ''
+
+    // Generate QR code as data URL from the qrCode content
+    let qrCodeDataUrl = ''
+    if (qrCodeContent) {
+      try {
+        qrCodeDataUrl = await QRCode.toDataURL(qrCodeContent, {
+          width: 300,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        })
+      } catch (qrError) {
+        console.error('Error generating QR code image:', qrError)
+      }
+    }
+
     return {
       success: true,
-      token: response.data.value || '',
-      qrCode: response.data.qrCode || '',
+      token: enrollmentToken,
+      qrCode: qrCodeDataUrl,
       expirationTimestamp: response.data.expirationTimestamp || '',
     }
   } catch (error) {
