@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { createEnrollmentToken } from "@/app/actions/android-management"
-import { QrCode, Copy, Check, AlertCircle } from "lucide-react"
+import { createEnrollmentToken, listDevices } from "@/app/actions/android-management"
+import { QrCode, Copy, Check, AlertCircle, ArrowRight, Loader2 } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 interface EnrollmentToken {
   token: string
@@ -13,16 +14,28 @@ interface EnrollmentToken {
 }
 
 export function QRCodeGenerator() {
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tokenData, setTokenData] = useState<EnrollmentToken | null>(null)
   const [copied, setCopied] = useState(false)
+  const [enrolledDevice, setEnrolledDevice] = useState<any | null>(null)
+  const [waitingForEnrollment, setWaitingForEnrollment] = useState(false)
+  const [deviceCountBefore, setDeviceCountBefore] = useState(0)
+  const pollingInterval = useRef<NodeJS.Timeout | null>(null)
 
   const handleGenerateToken = async () => {
     setLoading(true)
     setError(null)
+    setEnrolledDevice(null)
 
     try {
+      // Get current device count
+      const devicesResult = await listDevices()
+      if (devicesResult.success) {
+        setDeviceCountBefore(devicesResult.devices.length)
+      }
+
       const result = await createEnrollmentToken('default-policy', 3600)
 
       if (result.success) {
@@ -31,6 +44,10 @@ export function QRCodeGenerator() {
           qrCode: result.qrCode || '',
           expirationTimestamp: result.expirationTimestamp || '',
         })
+
+        // Start polling for new device enrollment
+        setWaitingForEnrollment(true)
+        startPollingForEnrollment()
       } else {
         setError(result.error || 'Failed to create enrollment token')
       }
@@ -40,6 +57,49 @@ export function QRCodeGenerator() {
       setLoading(false)
     }
   }
+
+  const startPollingForEnrollment = () => {
+    // Clear any existing interval
+    if (pollingInterval.current) {
+      clearInterval(pollingInterval.current)
+    }
+
+    // Poll every 5 seconds for new devices
+    pollingInterval.current = setInterval(async () => {
+      try {
+        const result = await listDevices()
+        if (result.success && result.devices.length > deviceCountBefore) {
+          // New device enrolled!
+          const newDevice = result.devices[result.devices.length - 1]
+          setEnrolledDevice(newDevice)
+          setWaitingForEnrollment(false)
+
+          // Stop polling
+          if (pollingInterval.current) {
+            clearInterval(pollingInterval.current)
+            pollingInterval.current = null
+          }
+        }
+      } catch (err) {
+        console.error('Error polling for devices:', err)
+      }
+    }, 5000)
+  }
+
+  const handleGoToDevice = () => {
+    // Navigate to devices page
+    // The device will be shown in the list
+    router.push('/management/devices')
+  }
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current)
+      }
+    }
+  }, [])
 
   const handleCopyToken = async () => {
     if (tokenData?.token) {
@@ -91,8 +151,42 @@ export function QRCodeGenerator() {
         </div>
       )}
 
+      {/* Device Enrolled Success */}
+      {enrolledDevice && (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-6">
+          <div className="flex items-start gap-3 mb-4">
+            <Check className="h-6 w-6 text-green-600 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-green-900 text-lg">Device Enrolled Successfully!</h3>
+              <p className="text-sm text-green-700 mt-1">
+                {enrolledDevice.hardwareInfo?.model || 'A device'} has been enrolled and is now being managed.
+              </p>
+            </div>
+          </div>
+          <Button onClick={handleGoToDevice} className="w-full md:w-auto">
+            <ArrowRight className="mr-2 h-4 w-4" />
+            Go to Device Management
+          </Button>
+        </div>
+      )}
+
+      {/* Waiting for Enrollment */}
+      {waitingForEnrollment && !enrolledDevice && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+            <div>
+              <p className="text-sm text-blue-900 font-medium">Waiting for device enrollment...</p>
+              <p className="text-xs text-blue-700 mt-1">
+                Scan the QR code below to enroll your device
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* QR Code Display */}
-      {tokenData && (
+      {tokenData && !enrolledDevice && (
         <div className="rounded-lg border bg-card p-6">
           <h3 className="text-lg font-semibold mb-4">Enrollment QR Code</h3>
 
