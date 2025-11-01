@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { listDevices, deleteDevice } from "@/app/actions/android-management"
 import { Smartphone, RefreshCw, AlertCircle, MoreVertical, Trash2 } from "lucide-react"
+import { DeviceDetailView } from "./device-detail-view"
 
 interface Device {
   name?: string
@@ -54,6 +55,7 @@ export function DeviceListTable() {
   const [deviceToDelete, setDeviceToDelete] = useState<{ id: string; name: string } | null>(null)
   const [deleteWithWipe, setDeleteWithWipe] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
 
   const loadDevices = async () => {
     setLoading(true)
@@ -102,6 +104,10 @@ export function DeviceListTable() {
         setDevices(devices.filter(d => !d.name?.endsWith(deviceToDelete.id)))
         setDeleteDialogOpen(false)
         setDeviceToDelete(null)
+        // Close detail view if deleted device was selected
+        if (selectedDevice?.name?.endsWith(deviceToDelete.id)) {
+          setSelectedDevice(null)
+        }
       } else {
         setError(result.error || 'Failed to delete device')
       }
@@ -110,6 +116,14 @@ export function DeviceListTable() {
     } finally {
       setDeleting(false)
     }
+  }
+
+  const handleDeviceDoubleClick = (device: Device) => {
+    setSelectedDevice(device)
+  }
+
+  const handleBackToList = () => {
+    setSelectedDevice(null)
   }
 
   const getDeviceId = (deviceName: string) => {
@@ -134,6 +148,11 @@ export function DeviceListTable() {
       default:
         return 'text-gray-600 bg-gray-50'
     }
+  }
+
+  // Show device detail view if a device is selected
+  if (selectedDevice) {
+    return <DeviceDetailView device={selectedDevice} onBack={handleBackToList} />
   }
 
   if (loading) {
@@ -211,12 +230,11 @@ export function DeviceListTable() {
           <table className="w-full">
             <thead className="bg-slate-50 border-b">
               <tr>
-                <th className="text-left p-4 font-medium text-sm">Device</th>
-                <th className="text-left p-4 font-medium text-sm">Model</th>
-                <th className="text-left p-4 font-medium text-sm">Android Version</th>
-                <th className="text-left p-4 font-medium text-sm">Status</th>
-                <th className="text-left p-4 font-medium text-sm">Enrolled</th>
-                <th className="text-left p-4 font-medium text-sm">Last Contact</th>
+                <th className="text-left p-4 font-medium text-sm w-12"></th>
+                <th className="text-left p-4 font-medium text-sm">Software version</th>
+                <th className="text-left p-4 font-medium text-sm">User</th>
+                <th className="text-left p-4 font-medium text-sm">Last reported</th>
+                <th className="text-left p-4 font-medium text-sm">Tags</th>
                 <th className="text-left p-4 font-medium text-sm w-12"></th>
               </tr>
             </thead>
@@ -225,49 +243,52 @@ export function DeviceListTable() {
                 <tr
                   key={device.name}
                   className="hover:bg-slate-50 transition-colors cursor-pointer"
+                  onDoubleClick={() => handleDeviceDoubleClick(device)}
                 >
+                  {/* Status Indicator (colored dot) */}
                   <td className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-full bg-blue-100 p-2">
-                        <Smartphone className="h-4 w-4 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">
-                          {device.hardwareInfo?.model || 'Unknown Model'}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {device.name ? getDeviceId(device.name) : 'N/A'}
-                        </p>
-                      </div>
+                    <div className="flex items-center justify-center">
+                      <div
+                        className={`h-3 w-3 rounded-full ${
+                          device.state === 'ACTIVE'
+                            ? 'bg-green-500'
+                            : device.state === 'PROVISIONING'
+                            ? 'bg-blue-500'
+                            : device.state === 'DISABLED'
+                            ? 'bg-red-500'
+                            : 'bg-gray-500'
+                        }`}
+                        title={device.state || 'UNKNOWN'}
+                      />
                     </div>
                   </td>
-                  <td className="p-4">
-                    <p className="text-sm">
-                      {device.hardwareInfo?.manufacturer || 'Unknown'}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {device.hardwareInfo?.brand || 'N/A'}
-                    </p>
-                  </td>
+
+                  {/* Software Version (Android version) */}
                   <td className="p-4">
                     <p className="text-sm">
                       {device.softwareInfo?.androidVersion || 'N/A'}
                     </p>
                   </td>
+
+                  {/* User */}
                   <td className="p-4">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                        device.state || 'UNKNOWN'
-                      )}`}
-                    >
-                      {device.state || 'UNKNOWN'}
-                    </span>
+                    <p className="text-sm text-muted-foreground">
+                      Admin
+                    </p>
                   </td>
-                  <td className="p-4 text-sm text-muted-foreground">
-                    {formatDate(device.enrollmentTime || '')}
+
+                  {/* Last Reported */}
+                  <td className="p-4">
+                    <p className="text-sm text-muted-foreground">
+                      {formatDate(device.lastStatusReportTime || '')}
+                    </p>
                   </td>
-                  <td className="p-4 text-sm text-muted-foreground">
-                    {formatDate(device.lastStatusReportTime || '')}
+
+                  {/* Tags */}
+                  <td className="p-4">
+                    <p className="text-sm text-muted-foreground">
+                      {device.hardwareInfo?.model || '-'}
+                    </p>
                   </td>
                   <td className="p-4">
                     <DropdownMenu>
