@@ -2,6 +2,55 @@
 
 ## High Priority
 
+### 🔴 CRITICAL: Self-Hosted APK Installation Limitation
+
+**Issue:** Android Management API cannot directly install self-hosted APK files.
+
+**Current Situation:**
+- APKs uploaded to our system are stored in Convex
+- Adding package name to policy doesn't install the app
+- Android Management API only supports:
+  1. Apps from Google Play (public)
+  2. Apps from Managed Google Play (private/enterprise apps)
+  3. Pre-installed system apps
+
+**Solutions (Pick One):**
+
+**Option A: Managed Google Play (Recommended)**
+- Upload APKs to Google Play Console as private apps
+- Apps become available in managed Google Play
+- Can then install via package name in policy
+- **Pros:** Proper MDM integration, automatic updates, secure
+- **Cons:** Requires Google Play Console account, approval process
+
+**Option B: Manual Installation Link**
+- Provide download link to users
+- Users manually install APK (requires "Unknown Sources")
+- Track installations separately
+- **Pros:** Simple, no Google approval needed
+- **Cons:** Not true MDM, requires user interaction, security concerns
+
+**Option C: Web App Wrapper**
+- Create a simple web app that downloads and installs APK
+- Use webApps policy feature
+- **Pros:** Semi-automated
+- **Cons:** Still requires user permission, complex
+
+**Recommended Next Steps:**
+1. Research managed Google Play private app upload process
+2. Update UI to indicate current limitations
+3. Consider hybrid approach (Google Play for production, manual for testing)
+
+**References:**
+- [Android Management API Apps](https://developers.google.com/android/management/apps)
+- [Managed Google Play](https://support.google.com/googleplay/work)
+
+**Status:** 🔴 Blocker
+**Priority:** Critical
+**Decision Needed:** Choose installation strategy
+
+---
+
 ### ⚠️ Google Android Management API - Default Policy Setup
 
 **Issue:** Need to properly configure the default policy in Google's Android Management API console.

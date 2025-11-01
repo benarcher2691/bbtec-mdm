@@ -347,27 +347,39 @@ export async function installAppOnDevice(deviceId: string, packageName: string, 
       }
     }
 
-    // Add the new app to the policy
+    // NOTE: Android Management API has severe limitations for self-hosted APKs
+    // For now, we'll add the app to the policy and return the download URL
+    // so users can manually install it
+
     const updatedPolicy = {
       ...currentPolicy,
       applications: [
         ...existingApps,
         {
           packageName: packageName,
-          installType: 'FORCE_INSTALLED' as const,
+          installType: 'AVAILABLE' as const,
         },
       ],
     }
 
-    // Update the policy (this automatically applies to all devices using it)
+    // Update the policy
     await androidmanagement.enterprises.policies.patch({
       name: currentPolicyName,
       requestBody: updatedPolicy as Record<string, unknown>,
     })
 
+    // Return different message based on whether we have a download URL
+    if (downloadUrl) {
+      return {
+        success: true,
+        message: 'Note: Self-hosted APKs require manual installation. The app has been added to the policy, but users will need to install it manually from the provided link.',
+        downloadUrl,
+      }
+    }
+
     return {
       success: true,
-      message: 'Application install initiated. It may take a few minutes to appear on the device.',
+      message: 'Application added to policy. If this is a Google Play app, it will install automatically. For self-hosted APKs, manual installation is required.',
     }
   } catch (error) {
     console.error('Error installing app on device:', error)

@@ -52,6 +52,7 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
   const [installing, setInstalling] = useState(false)
   const [installError, setInstallError] = useState<string | null>(null)
   const [installSuccess, setInstallSuccess] = useState(false)
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
 
   const applications = useQuery(api.applications.listApplications)
 
@@ -97,19 +98,29 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
 
     try {
       const deviceId = getDeviceId(device.name)
+
+      // Generate public URL for the APK
+      const baseUrl = window.location.origin
+      const apkUrl = `${baseUrl}/api/apps/${app.storageId}`
+
       const result = await installAppOnDevice(
         deviceId,
         app.packageName,
-        '' // We'll pass the download URL when needed
+        apkUrl
       )
 
       if (result.success) {
         setInstallSuccess(true)
-        setTimeout(() => {
-          setInstallDialogOpen(false)
-          setInstallSuccess(false)
-          setSelectedApp(null)
-        }, 2000)
+        if (result.downloadUrl) {
+          setDownloadUrl(result.downloadUrl)
+        } else {
+          // Auto-close only if no download URL (Google Play apps)
+          setTimeout(() => {
+            setInstallDialogOpen(false)
+            setInstallSuccess(false)
+            setSelectedApp(null)
+          }, 2000)
+        }
       } else {
         setInstallError(result.error || 'Failed to install app')
       }
@@ -204,12 +215,39 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
 
               {/* Success Message */}
               {installSuccess && (
-                <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                  <div className="flex items-center gap-2">
-                    <Check className="h-5 w-5 text-green-600" />
-                    <p className="text-sm text-green-700">
-                      Application installation initiated successfully!
-                    </p>
+                <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <Check className="h-5 w-5 text-green-600 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm text-green-700 font-medium mb-2">
+                        Application added to policy
+                      </p>
+                      {downloadUrl ? (
+                        <>
+                          <p className="text-sm text-green-700 mb-3">
+                            <strong>Manual installation required:</strong> Self-hosted APKs cannot be automatically installed via Android Management API.
+                          </p>
+                          <div className="bg-white rounded p-3 border border-green-200">
+                            <p className="text-xs font-medium text-green-900 mb-2">Download Link:</p>
+                            <a
+                              href={downloadUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:text-blue-800 underline break-all"
+                            >
+                              {downloadUrl}
+                            </a>
+                          </div>
+                          <p className="text-xs text-green-600 mt-3">
+                            Users will need to enable "Unknown Sources" and download this APK manually.
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-green-700">
+                          If this is a Google Play app, it will install automatically within a few minutes.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
