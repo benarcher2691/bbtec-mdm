@@ -5,11 +5,25 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { UserButton } from "@clerk/nextjs"
 import { Menu } from "lucide-react"
 import { Sidebar } from "./sidebar"
+import { useSidebar } from "./dashboard-layout"
 
 export function Navbar() {
+  const { toggle } = useSidebar()
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center px-4 gap-4">
+        {/* Desktop Hamburger Menu */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden md:flex"
+          onClick={toggle}
+          aria-label="Toggle sidebar"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+
         {/* Mobile Hamburger Menu */}
         <Sheet>
           <SheetTrigger asChild>
@@ -22,7 +36,7 @@ export function Navbar() {
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0">
+          <SheetContent side="left" className="w-[236px] p-0">
             <Sidebar />
           </SheetContent>
         </Sheet>

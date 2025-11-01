@@ -1,6 +1,6 @@
 "use client"
 
-import { ReactNode } from "react"
+import { ReactNode, useState, createContext, useContext } from "react"
 import { Authenticated, AuthLoading, Unauthenticated } from "convex/react"
 import { Navbar } from "./navbar"
 import { Sidebar } from "./sidebar"
@@ -11,9 +11,27 @@ interface DashboardLayoutProps {
   children: ReactNode
 }
 
+interface SidebarContextType {
+  isOpen: boolean
+  toggle: () => void
+}
+
+const SidebarContext = createContext<SidebarContextType>({
+  isOpen: true,
+  toggle: () => {},
+})
+
+export const useSidebar = () => useContext(SidebarContext)
+
 export function DashboardLayout({ children }: DashboardLayoutProps) {
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen)
+  }
+
   return (
-    <>
+    <SidebarContext.Provider value={{ isOpen: sidebarOpen, toggle: toggleSidebar }}>
       <AuthLoading>
         <div className="flex h-screen items-center justify-center">
           <div className="text-center">
@@ -33,9 +51,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <Navbar />
 
           <div className="flex flex-1 overflow-hidden">
-            {/* Desktop Sidebar - hidden on mobile */}
-            <aside className="hidden md:flex w-72 border-r">
-              <Sidebar />
+            {/* Desktop Sidebar - with slide animation */}
+            <aside
+              className={`hidden md:flex border-r transition-all duration-300 ease-in-out ${
+                sidebarOpen ? 'w-[236px]' : 'w-0'
+              }`}
+            >
+              <div className={`w-[236px] ${sidebarOpen ? 'block' : 'hidden'}`}>
+                <Sidebar />
+              </div>
             </aside>
 
             {/* Main Content Area */}
@@ -45,7 +69,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </div>
       </Authenticated>
-    </>
+    </SidebarContext.Provider>
   )
 }
 
