@@ -41,4 +41,18 @@ export default defineSchema({
     timestamp: v.number(),
   }).index("by_user", ["userId"])
     .index("by_resource", ["resourceType", "resourceId"]),
+
+  // Uploaded applications (APK files)
+  applications: defineTable({
+    userId: v.string(),          // Clerk user ID who uploaded
+    name: v.string(),             // App display name
+    packageName: v.string(),      // Android package name (e.g., com.example.app)
+    versionName: v.string(),      // Version string (e.g., "1.0.0")
+    versionCode: v.number(),      // Version code number
+    fileSize: v.number(),         // File size in bytes
+    storageId: v.id("_storage"),  // Convex file storage ID
+    uploadedAt: v.number(),       // Timestamp
+    description: v.optional(v.string()),
+  }).index("by_user", ["userId"])
+    .index("by_package", ["packageName"]),
 });

@@ -294,3 +294,84 @@ export async function deleteDevice(deviceId: string, wipeData: boolean = false) 
     }
   }
 }
+
+/**
+ * Server Action: Install an application on a device
+ * This creates a device-specific policy that includes the app
+ */
+export async function installAppOnDevice(deviceId: string, packageName: string, downloadUrl: string) {
+  const { userId } = await auth()
+
+  if (!userId) {
+    throw new Error('Unauthorized')
+  }
+
+  const enterpriseName = process.env.ENTERPRISE_NAME
+  if (!enterpriseName) {
+    throw new Error('ENTERPRISE_NAME not configured')
+  }
+
+  try {
+    const androidmanagement = await getAndroidManagementClient()
+
+    // Create a device-specific policy name
+    const devicePolicyId = `device-${deviceId}-policy`
+    const policyName = `${enterpriseName}/policies/${devicePolicyId}`
+
+    // Get current default policy to merge settings
+    const defaultPolicyName = `${enterpriseName}/policies/default-policy`
+    let basePolicy: Record<string, unknown> & { applications?: unknown[] } = {}
+
+    try {
+      const existingPolicy = await androidmanagement.enterprises.policies.get({
+        name: defaultPolicyName,
+      })
+      basePolicy = existingPolicy.data as Record<string, unknown> & { applications?: unknown[] }
+    } catch (err) {
+      // Default policy might not exist, use minimal policy
+      console.log('Using minimal base policy')
+    }
+
+    // Create/update device-specific policy with the app
+    const existingApps = Array.isArray(basePolicy.applications) ? basePolicy.applications : []
+
+    const policyWithApp = {
+      ...basePolicy,
+      applications: [
+        // Include existing apps from base policy
+        ...existingApps,
+        // Add the new app
+        {
+          packageName: packageName,
+          installType: 'FORCE_INSTALLED' as const,
+        },
+      ],
+    }
+
+    // Create or update the policy
+    await androidmanagement.enterprises.policies.patch({
+      name: policyName,
+      requestBody: policyWithApp as Record<string, unknown>,
+    })
+
+    // Apply the policy to the device
+    const deviceName = `${enterpriseName}/devices/${deviceId}`
+    await androidmanagement.enterprises.devices.patch({
+      name: deviceName,
+      requestBody: {
+        policyName: policyName,
+      },
+    })
+
+    return {
+      success: true,
+      message: 'Application install initiated. It may take a few minutes to appear on the device.',
+    }
+  } catch (error) {
+    console.error('Error installing app on device:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to install application',
+    }
+  }
+}

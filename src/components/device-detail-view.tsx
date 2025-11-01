@@ -1,8 +1,22 @@
 "use client"
 
+import { useState } from "react"
+import { useQuery } from "convex/react"
+import { api } from "../../convex/_generated/api"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Smartphone, Calendar, Wifi, HardDrive, Battery } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { ArrowLeft, Smartphone, Calendar, Wifi, HardDrive, Package, Download, AlertCircle, Check } from "lucide-react"
+import { installAppOnDevice } from "@/app/actions/android-management"
+import type { Id } from "../../convex/_generated/dataModel"
 
 interface Device {
   name?: string | null
@@ -33,6 +47,14 @@ interface DeviceDetailViewProps {
 }
 
 export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
+  const [installDialogOpen, setInstallDialogOpen] = useState(false)
+  const [selectedApp, setSelectedApp] = useState<Id<"applications"> | null>(null)
+  const [installing, setInstalling] = useState(false)
+  const [installError, setInstallError] = useState<string | null>(null)
+  const [installSuccess, setInstallSuccess] = useState(false)
+
+  const applications = useQuery(api.applications.listApplications)
+
   const getDeviceId = (deviceName: string) => {
     const parts = deviceName.split('/')
     return parts[parts.length - 1]
@@ -63,6 +85,41 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
     }
   }
 
+  const handleInstallApp = async () => {
+    if (!selectedApp || !device.name) return
+
+    const app = applications?.find(a => a._id === selectedApp)
+    if (!app) return
+
+    setInstalling(true)
+    setInstallError(null)
+    setInstallSuccess(false)
+
+    try {
+      const deviceId = getDeviceId(device.name)
+      const result = await installAppOnDevice(
+        deviceId,
+        app.packageName,
+        '' // We'll pass the download URL when needed
+      )
+
+      if (result.success) {
+        setInstallSuccess(true)
+        setTimeout(() => {
+          setInstallDialogOpen(false)
+          setInstallSuccess(false)
+          setSelectedApp(null)
+        }, 2000)
+      } else {
+        setInstallError(result.error || 'Failed to install app')
+      }
+    } catch (err) {
+      setInstallError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setInstalling(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header with Back Button */}
@@ -86,6 +143,105 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
         >
           {device.state || 'UNKNOWN'}
         </span>
+        <Dialog open={installDialogOpen} onOpenChange={setInstallDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Download className="mr-2 h-4 w-4" />
+              Install App
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Install Application</DialogTitle>
+              <DialogDescription>
+                Select an application to install on this device
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              {/* Application List */}
+              {applications === undefined ? (
+                <div className="flex items-center justify-center p-8">
+                  <div className="h-6 w-6 animate-spin rounded-full border-4 border-solid border-current border-r-transparent" />
+                </div>
+              ) : applications.length === 0 ? (
+                <div className="text-center p-8">
+                  <Package className="h-12 w-12 text-slate-400 mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">
+                    No applications uploaded yet
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {applications.map((app) => (
+                    <div
+                      key={app._id}
+                      className={`rounded-lg border p-4 cursor-pointer transition-colors ${
+                        selectedApp === app._id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'hover:bg-slate-50'
+                      }`}
+                      onClick={() => setSelectedApp(app._id)}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="rounded-lg bg-blue-100 p-2">
+                          <Package className="h-5 w-5 text-blue-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium">{app.name}</p>
+                          <p className="text-sm text-muted-foreground truncate">
+                            {app.packageName}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            v{app.versionName} ({app.versionCode})
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Success Message */}
+              {installSuccess && (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                  <div className="flex items-center gap-2">
+                    <Check className="h-5 w-5 text-green-600" />
+                    <p className="text-sm text-green-700">
+                      Application installation initiated successfully!
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Error Message */}
+              {installError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                    <p className="text-sm text-red-700">{installError}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setInstallDialogOpen(false)}
+                disabled={installing}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleInstallApp}
+                disabled={!selectedApp || installing || installSuccess}
+              >
+                {installing ? 'Installing...' : 'Install'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Separator />

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ChevronDown, ChevronRight, Smartphone, QrCode } from "lucide-react"
+import { ChevronDown, ChevronRight, Smartphone, QrCode, Package } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -30,6 +30,7 @@ const navigationSections: NavSection[] = [
     title: "Management",
     items: [
       { title: "Devices", href: "/management/devices", icon: Smartphone },
+      { title: "Applications", href: "/management/applications", icon: Package },
     ],
   },
 ]

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as applications from "../applications.js";
 import type * as audit from "../audit.js";
 import type * as devices from "../devices.js";
 import type * as preferences from "../preferences.js";
@@ -27,6 +28,7 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  applications: typeof applications;
   audit: typeof audit;
   devices: typeof devices;
   preferences: typeof preferences;
