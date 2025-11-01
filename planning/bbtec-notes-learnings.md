@@ -111,30 +111,46 @@ See `/home/ben/sandbox/bbtec-notes/docs/AUTHENTICATION_AND_SYNC.md` for full det
 
 ### Investigation Results
 
-**Files Searched:**
-- `/home/ben/sandbox/bbtec-notes/src/` - No middleware.ts found
-- `/home/ben/sandbox/bbtec-notes/middleware.ts` - Not found in root either
-- Only found in:
-  - `node_modules/@clerk/nextjs/dist/esm/server/middleware.js`
-  - `.next/` build directory
+**Initial Investigation:**
+- Couldn't find middleware.ts in bbtec-notes/src/ or root
+- Only found in node_modules and .next build directories
 
-### Current Status
+### **CONFIRMED: Middleware Must Be in src/ for Next.js 15**
 
-**Unclear:** The middleware location issue mentioned by user couldn't be verified in the current codebase.
+When running bbtec-mdm, we encountered this exact error:
 
-**Possibilities:**
-1. Change was attempted but not committed
-2. Refers to a different component (not Clerk middleware)
-3. Issue was resolved differently in final implementation
+```
+Clerk: clerkMiddleware() was not run, your middleware file might be misplaced.
+Move your middleware file to ./src/middleware.ts. Currently located at ./middleware.ts
+```
 
-**Current bbtec-mdm Setup:**
-- Middleware is at `/home/ben/sandbox/bbtec-mdm/middleware.ts` (root level)
-- This is standard Next.js 15 location
-- No issues encountered so far
+### Solution
+
+**For Next.js 15 projects using src/ directory structure:**
+
+✅ **Correct location:** `src/middleware.ts`
+❌ **Incorrect location:** `middleware.ts` (root)
+
+This is a Next.js 15 requirement when using the `src/` directory structure for your app.
+
+### Fix Applied
+
+```bash
+mv middleware.ts src/middleware.ts
+```
+
+After moving the file, Clerk middleware runs correctly and authentication works properly.
+
+### Why This Matters
+
+If middleware is in the wrong location:
+- Clerk authentication won't protect routes
+- Server Actions will fail with "Not authenticated" errors
+- Sign-in/sign-out flows may not work correctly
 
 ### Recommendation
 
-Keep middleware at root level unless issues arise. Monitor for any auth-related errors during testing.
+**Always place middleware.ts in src/ directory when using Next.js 15 with src/ structure.**
 
 ---
 
