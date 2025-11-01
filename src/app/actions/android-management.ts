@@ -168,7 +168,10 @@ export async function createPolicy(policyId: string = 'default-policy') {
   }
 
   const defaultPolicy = {
-    // No password requirements - device can be unlocked without PIN
+    // Explicitly disable password requirements
+    passwordRequirements: {
+      passwordQuality: 'PASSWORD_QUALITY_UNSPECIFIED',
+    },
     statusReportingSettings: {
       applicationReportsEnabled: true,
       deviceSettingsEnabled: true,
