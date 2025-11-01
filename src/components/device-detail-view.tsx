@@ -63,7 +63,7 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
   const formatDate = (timestamp: string) => {
     if (!timestamp) return 'N/A'
     const date = new Date(timestamp)
-    return date.toLocaleString()
+    return date.toISOString().split('T')[0] // YYYY-MM-DD
   }
 
   const formatBytes = (bytes: string) => {

@@ -223,7 +223,7 @@ export function ApplicationsManager() {
   }
 
   const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleDateString()
+    return new Date(timestamp).toISOString().split('T')[0] // YYYY-MM-DD
   }
 
   return (

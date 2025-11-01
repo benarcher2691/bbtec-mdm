@@ -134,7 +134,7 @@ export function DeviceListTable() {
 
   const formatDate = (timestamp: string) => {
     if (!timestamp) return 'N/A'
-    return new Date(timestamp).toLocaleDateString()
+    return new Date(timestamp).toISOString().split('T')[0] // YYYY-MM-DD
   }
 
   const getStatusColor = (state: string) => {
