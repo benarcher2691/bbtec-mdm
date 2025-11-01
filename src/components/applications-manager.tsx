@@ -47,6 +47,7 @@ export function ApplicationsManager() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [appToDelete, setAppToDelete] = useState<{ id: Id<"applications">; name: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [parsing, setParsing] = useState(false)
 
   const [formData, setFormData] = useState<UploadForm>({
     name: "",
@@ -63,7 +64,7 @@ export function ApplicationsManager() {
   const saveApplication = useMutation(api.applications.saveApplication)
   const deleteApplication = useMutation(api.applications.deleteApplication)
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -81,13 +82,46 @@ export function ApplicationsManager() {
 
     setSelectedFile(file)
     setError(null)
+    setParsing(true)
 
-    // Auto-populate form with filename if name is empty
-    if (!formData.name) {
+    try {
+      // Read file as ArrayBuffer
+      const arrayBuffer = await file.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+
+      // Parse APK metadata
+      const { parseApkMetadata } = await import('@/app/actions/parse-apk')
+      const result = await parseApkMetadata(buffer)
+
+      if (result.success && result.metadata) {
+        // Auto-fill form with extracted metadata
+        setFormData({
+          name: result.metadata.name,
+          packageName: result.metadata.packageName,
+          versionName: result.metadata.versionName,
+          versionCode: result.metadata.versionCode.toString(),
+          description: formData.description, // Keep existing description
+        })
+      } else {
+        // Fallback to filename if parsing fails
+        setFormData({
+          ...formData,
+          name: file.name.replace('.apk', ''),
+        })
+        if (result.error) {
+          setError(`Warning: ${result.error}. Please fill in details manually.`)
+        }
+      }
+    } catch (err) {
+      console.error('Error parsing APK:', err)
+      // Fallback to filename
       setFormData({
         ...formData,
         name: file.name.replace('.apk', ''),
       })
+      setError('Could not parse APK metadata. Please fill in details manually.')
+    } finally {
+      setParsing(false)
     }
   }
 
@@ -210,7 +244,7 @@ export function ApplicationsManager() {
             <DialogHeader>
               <DialogTitle>Upload Application</DialogTitle>
               <DialogDescription>
-                Upload an APK file to deploy to your managed devices. Maximum file size: 100MB
+                Upload an APK file - metadata will be extracted automatically. Maximum file size: 100MB
               </DialogDescription>
             </DialogHeader>
 
@@ -224,60 +258,66 @@ export function ApplicationsManager() {
                   accept=".apk"
                   ref={fileInputRef}
                   onChange={handleFileSelect}
-                  disabled={uploading}
+                  disabled={uploading || parsing}
                 />
                 {selectedFile && (
                   <p className="text-sm text-muted-foreground">
                     {selectedFile.name} ({formatFileSize(selectedFile.size)})
                   </p>
                 )}
+                {parsing && (
+                  <div className="flex items-center gap-2 text-sm text-blue-600">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent" />
+                    <span>Parsing APK metadata...</span>
+                  </div>
+                )}
               </div>
 
               {/* App Name */}
               <div className="space-y-2">
-                <Label htmlFor="app-name">Application Name *</Label>
+                <Label htmlFor="app-name">Application Name * (auto-filled)</Label>
                 <Input
                   id="app-name"
                   placeholder="My App"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  disabled={uploading}
+                  disabled={uploading || parsing}
                 />
               </div>
 
               {/* Package Name */}
               <div className="space-y-2">
-                <Label htmlFor="package-name">Package Name *</Label>
+                <Label htmlFor="package-name">Package Name * (auto-filled)</Label>
                 <Input
                   id="package-name"
                   placeholder="com.example.myapp"
                   value={formData.packageName}
                   onChange={(e) => setFormData({ ...formData, packageName: e.target.value })}
-                  disabled={uploading}
+                  disabled={uploading || parsing}
                 />
               </div>
 
               {/* Version Info */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="version-name">Version Name *</Label>
+                  <Label htmlFor="version-name">Version Name * (auto-filled)</Label>
                   <Input
                     id="version-name"
                     placeholder="1.0.0"
                     value={formData.versionName}
                     onChange={(e) => setFormData({ ...formData, versionName: e.target.value })}
-                    disabled={uploading}
+                    disabled={uploading || parsing}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="version-code">Version Code *</Label>
+                  <Label htmlFor="version-code">Version Code * (auto-filled)</Label>
                   <Input
                     id="version-code"
                     type="number"
                     placeholder="1"
                     value={formData.versionCode}
                     onChange={(e) => setFormData({ ...formData, versionCode: e.target.value })}
-                    disabled={uploading}
+                    disabled={uploading || parsing}
                   />
                 </div>
               </div>
@@ -290,7 +330,7 @@ export function ApplicationsManager() {
                   placeholder="Brief description of the app"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  disabled={uploading}
+                  disabled={uploading || parsing}
                 />
               </div>
 
