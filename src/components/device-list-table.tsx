@@ -2,8 +2,26 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { listDevices } from "@/app/actions/android-management"
-import { Smartphone, RefreshCw, AlertCircle } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { listDevices, deleteDevice } from "@/app/actions/android-management"
+import { Smartphone, RefreshCw, AlertCircle, MoreVertical, Trash2 } from "lucide-react"
 
 interface Device {
   name?: string
@@ -32,6 +50,10 @@ export function DeviceListTable() {
   const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deviceToDelete, setDeviceToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [deleteWithWipe, setDeleteWithWipe] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const loadDevices = async () => {
     setLoading(true)
@@ -55,6 +77,40 @@ export function DeviceListTable() {
   useEffect(() => {
     loadDevices()
   }, [])
+
+  const handleDeleteClick = (device: Device, withWipe: boolean) => {
+    if (!device.name) return
+
+    const deviceId = getDeviceId(device.name)
+    const deviceDisplayName = device.hardwareInfo?.model || deviceId
+
+    setDeviceToDelete({ id: deviceId, name: deviceDisplayName })
+    setDeleteWithWipe(withWipe)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deviceToDelete) return
+
+    setDeleting(true)
+
+    try {
+      const result = await deleteDevice(deviceToDelete.id, deleteWithWipe)
+
+      if (result.success) {
+        // Remove device from local state
+        setDevices(devices.filter(d => !d.name?.endsWith(deviceToDelete.id)))
+        setDeleteDialogOpen(false)
+        setDeviceToDelete(null)
+      } else {
+        setError(result.error || 'Failed to delete device')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const getDeviceId = (deviceName: string) => {
     // Extract device ID from full name (enterprises/xxx/devices/yyy)
@@ -161,6 +217,7 @@ export function DeviceListTable() {
                 <th className="text-left p-4 font-medium text-sm">Status</th>
                 <th className="text-left p-4 font-medium text-sm">Enrolled</th>
                 <th className="text-left p-4 font-medium text-sm">Last Contact</th>
+                <th className="text-left p-4 font-medium text-sm w-12"></th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -212,12 +269,80 @@ export function DeviceListTable() {
                   <td className="p-4 text-sm text-muted-foreground">
                     {formatDate(device.lastStatusReportTime || '')}
                   </td>
+                  <td className="p-4">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-red-600"
+                          onClick={() => handleDeleteClick(device, true)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete & Wipe Device
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleDeleteClick(device, false)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Remove from List
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteWithWipe ? 'Delete & Wipe Device?' : 'Remove Device?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteWithWipe ? (
+                <>
+                  This will <strong className="text-red-600">factory reset</strong> the device{' '}
+                  <strong>{deviceToDelete?.name}</strong> and remove it from management.
+                  <br /><br />
+                  <strong>All data on the device will be permanently erased.</strong>
+                  <br /><br />
+                  This action cannot be undone.
+                </>
+              ) : (
+                <>
+                  Remove device <strong>{deviceToDelete?.name}</strong> from the enterprise?
+                  <br /><br />
+                  This is useful if the device has already been manually factory reset.
+                  The device will no longer appear in the device list.
+                  <br /><br />
+                  If the device is still enrolled, it will continue to be managed until manually reset.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={deleting}
+              className={deleteWithWipe ? 'bg-red-600 hover:bg-red-700' : ''}
+            >
+              {deleting ? 'Processing...' : deleteWithWipe ? 'Delete & Wipe' : 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -185,3 +185,94 @@ export async function createPolicy(policyId: string = 'default-policy') {
     }
   }
 }
+
+/**
+ * Server Action: Issue a device command (lock, reboot, wipe, etc.)
+ */
+export async function issueDeviceCommand(deviceId: string, commandType: 'REBOOT' | 'LOCK' | 'RELINQUISH_OWNERSHIP') {
+  const { userId } = await auth()
+
+  if (!userId) {
+    throw new Error('Unauthorized')
+  }
+
+  const enterpriseName = process.env.ENTERPRISE_NAME
+  if (!enterpriseName) {
+    throw new Error('ENTERPRISE_NAME not configured')
+  }
+
+  try {
+    const androidmanagement = await getAndroidManagementClient()
+    const deviceName = `${enterpriseName}/devices/${deviceId}`
+
+    const response = await androidmanagement.enterprises.devices.issueCommand({
+      name: deviceName,
+      requestBody: {
+        type: commandType,
+      },
+    })
+
+    return {
+      success: true,
+      operation: response.data,
+    }
+  } catch (error) {
+    console.error('Error issuing device command:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to issue device command',
+    }
+  }
+}
+
+/**
+ * Server Action: Delete a device from the enterprise
+ * This permanently removes the device. The device will be factory reset if still enrolled.
+ */
+export async function deleteDevice(deviceId: string, wipeData: boolean = false) {
+  const { userId } = await auth()
+
+  if (!userId) {
+    throw new Error('Unauthorized')
+  }
+
+  const enterpriseName = process.env.ENTERPRISE_NAME
+  if (!enterpriseName) {
+    throw new Error('ENTERPRISE_NAME not configured')
+  }
+
+  try {
+    const androidmanagement = await getAndroidManagementClient()
+    const deviceName = `${enterpriseName}/devices/${deviceId}`
+
+    // If wipeData is requested, issue RELINQUISH_OWNERSHIP command first
+    // This will factory reset the device
+    if (wipeData) {
+      await androidmanagement.enterprises.devices.issueCommand({
+        name: deviceName,
+        requestBody: {
+          type: 'RELINQUISH_OWNERSHIP',
+        },
+      })
+
+      // Wait a moment for the command to be processed
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+
+    // Delete the device from the enterprise
+    const response = await androidmanagement.enterprises.devices.delete({
+      name: deviceName,
+    })
+
+    return {
+      success: true,
+      wiped: wipeData,
+    }
+  } catch (error) {
+    console.error('Error deleting device:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete device',
+    }
+  }
+}
