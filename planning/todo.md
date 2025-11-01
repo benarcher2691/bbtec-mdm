@@ -2,52 +2,41 @@
 
 ## High Priority
 
-### 🔴 CRITICAL: Self-Hosted APK Installation Limitation
+### ✅ RESOLVED: Private APK Installation Strategy
 
-**Issue:** Android Management API cannot directly install self-hosted APK files.
+**Decision:** Use "Unknown Sources" + Download Links approach
 
-**Current Situation:**
-- APKs uploaded to our system are stored in Convex
-- Adding package name to policy doesn't install the app
-- Android Management API only supports:
-  1. Apps from Google Play (public)
-  2. Apps from Managed Google Play (private/enterprise apps)
-  3. Pre-installed system apps
+**Reason:** User requirements:
+- Private APKs not in Google Play
+- No Managed Google Play workflow desired
+- Need direct control over APK distribution
 
-**Solutions (Pick One):**
+**Implementation:**
+1. ✅ Policy updated to allow `installUnknownSourcesAllowed: true`
+2. ✅ APKs stored in Convex, served via `/api/apps/[storageId]`
+3. ✅ UI provides download links for manual installation
+4. ✅ Clear instructions shown to users
 
-**Option A: Managed Google Play (Recommended)**
-- Upload APKs to Google Play Console as private apps
-- Apps become available in managed Google Play
-- Can then install via package name in policy
-- **Pros:** Proper MDM integration, automatic updates, secure
-- **Cons:** Requires Google Play Console account, approval process
+**Workflow:**
+1. Admin uploads APK to system
+2. Admin selects device and clicks "Install App"
+3. System provides download link
+4. User on device:
+   - Clicks download link (Unknown Sources already allowed by policy)
+   - Confirms installation
+   - App installs
 
-**Option B: Manual Installation Link**
-- Provide download link to users
-- Users manually install APK (requires "Unknown Sources")
-- Track installations separately
-- **Pros:** Simple, no Google approval needed
-- **Cons:** Not true MDM, requires user interaction, security concerns
+**Limitations:**
+- Requires one user tap to confirm installation (Android security requirement)
+- Not fully automated, but as automated as possible without Google Play
 
-**Option C: Web App Wrapper**
-- Create a simple web app that downloads and installs APK
-- Use webApps policy feature
-- **Pros:** Semi-automated
-- **Cons:** Still requires user permission, complex
+**Next Steps:**
+1. Update policy on Google servers: Visit `/api/update-policy`
+2. Generate new QR code for enrollment
+3. Test workflow with actual device
 
-**Recommended Next Steps:**
-1. Research managed Google Play private app upload process
-2. Update UI to indicate current limitations
-3. Consider hybrid approach (Google Play for production, manual for testing)
-
-**References:**
-- [Android Management API Apps](https://developers.google.com/android/management/apps)
-- [Managed Google Play](https://support.google.com/googleplay/work)
-
-**Status:** 🔴 Blocker
-**Priority:** Critical
-**Decision Needed:** Choose installation strategy
+**Status:** 🟢 Implemented
+**Priority:** High → Complete
 
 ---
 

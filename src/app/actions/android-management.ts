@@ -172,6 +172,8 @@ export async function createPolicy(policyId: string = 'default-policy') {
     passwordRequirements: {
       passwordQuality: 'PASSWORD_QUALITY_UNSPECIFIED',
     },
+    // Allow installation from unknown sources (required for private APKs)
+    installUnknownSourcesAllowed: true,
     statusReportingSettings: {
       applicationReportsEnabled: true,
       deviceSettingsEnabled: true,
