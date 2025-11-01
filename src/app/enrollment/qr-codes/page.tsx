@@ -1,4 +1,5 @@
 import { DashboardLayout } from "@/components/dashboard-layout"
+import { QRCodeGenerator } from "@/components/qr-code-generator"
 
 export default function QRCodesPage() {
   return (
@@ -6,14 +7,10 @@ export default function QRCodesPage() {
       <div className="p-8">
         <h1 className="text-3xl font-bold mb-4">QR Code Enrollment</h1>
         <p className="text-muted-foreground mb-8">
-          Generate QR codes for device enrollment
+          Generate QR codes for device enrollment using Android Management API
         </p>
 
-        <div className="rounded-lg border bg-card p-6">
-          <p className="text-center text-muted-foreground">
-            QR code generation will be implemented here
-          </p>
-        </div>
+        <QRCodeGenerator />
       </div>
     </DashboardLayout>
   )

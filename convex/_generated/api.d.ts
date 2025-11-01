@@ -8,6 +8,10 @@
  * @module
  */
 
+import type * as audit from "../audit.js";
+import type * as devices from "../devices.js";
+import type * as preferences from "../preferences.js";
+
 import type {
   ApiFromModules,
   FilterApi,
@@ -22,7 +26,11 @@ import type {
  * const myFunctionReference = api.myModule.myFunction;
  * ```
  */
-declare const fullApi: ApiFromModules<{}>;
+declare const fullApi: ApiFromModules<{
+  audit: typeof audit;
+  devices: typeof devices;
+  preferences: typeof preferences;
+}>;
 declare const fullApiWithMounts: typeof fullApi;
 
 export declare const api: FilterApi<
