@@ -32,3 +32,17 @@ logs/
 # Build output
 dist/
 build/
+
+# Next.js
+.next/
+out/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Vercel
+.vercel
+
+# Convex
+.convex/

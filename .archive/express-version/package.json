@@ -1,0 +1,30 @@
+{
+  "name": "bbtec-mdm",
+  "version": "1.0.0",
+  "description": "Educational MDM enrollment system using Android Management API",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "keywords": [
+    "mdm",
+    "android",
+    "enrollment",
+    "education"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@clerk/backend": "^2.19.1",
+    "@clerk/clerk-sdk-node": "^4.13.23",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "googleapis": "^128.0.0",
+    "qrcode": "^1.5.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
