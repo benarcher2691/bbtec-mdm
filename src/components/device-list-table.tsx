@@ -25,26 +25,26 @@ import { Smartphone, RefreshCw, AlertCircle, MoreVertical, Trash2 } from "lucide
 import { DeviceDetailView } from "./device-detail-view"
 
 interface Device {
-  name?: string
-  enrollmentTime?: string
-  lastStatusReportTime?: string
-  appliedState?: string
-  state?: string
+  name?: string | null
+  enrollmentTime?: string | null
+  lastStatusReportTime?: string | null
+  appliedState?: string | null
+  state?: string | null
   hardwareInfo?: {
-    model?: string
-    manufacturer?: string
-    serialNumber?: string
-    brand?: string
-  }
+    model?: string | null
+    manufacturer?: string | null
+    serialNumber?: string | null
+    brand?: string | null
+  } | null
   softwareInfo?: {
-    androidVersion?: string
-    androidBuildNumber?: string
-  }
-  policyCompliant?: boolean
+    androidVersion?: string | null
+    androidBuildNumber?: string | null
+  } | null
+  policyCompliant?: boolean | null
   memoryInfo?: {
-    totalRam?: string
-    totalInternalStorage?: string
-  }
+    totalRam?: string | null
+    totalInternalStorage?: string | null
+  } | null
 }
 
 export function DeviceListTable() {
