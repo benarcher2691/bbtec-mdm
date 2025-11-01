@@ -9,7 +9,7 @@ import { tmpdir } from 'os'
 /**
  * Server Action: Parse APK file to extract metadata
  */
-export async function parseApkMetadata(fileBuffer: Buffer) {
+export async function parseApkMetadata(fileData: number[]) {
   const { userId } = await auth()
 
   if (!userId) {
@@ -20,6 +20,9 @@ export async function parseApkMetadata(fileBuffer: Buffer) {
   const tempFilePath = join(tmpdir(), `apk-${Date.now()}-${Math.random().toString(36).substring(7)}.apk`)
 
   try {
+    // Convert array back to Buffer
+    const fileBuffer = Buffer.from(fileData)
+
     // Write buffer to temporary file
     await writeFile(tempFilePath, fileBuffer)
 

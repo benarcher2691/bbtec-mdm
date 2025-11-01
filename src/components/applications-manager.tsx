@@ -85,13 +85,13 @@ export function ApplicationsManager() {
     setParsing(true)
 
     try {
-      // Read file as ArrayBuffer
+      // Read file as ArrayBuffer and convert to Uint8Array for serialization
       const arrayBuffer = await file.arrayBuffer()
-      const buffer = Buffer.from(arrayBuffer)
+      const uint8Array = new Uint8Array(arrayBuffer)
 
       // Parse APK metadata
       const { parseApkMetadata } = await import('@/app/actions/parse-apk')
-      const result = await parseApkMetadata(buffer)
+      const result = await parseApkMetadata(Array.from(uint8Array))
 
       if (result.success && result.metadata) {
         // Auto-fill form with extracted metadata
