@@ -316,34 +316,42 @@ export async function installAppOnDevice(deviceId: string, packageName: string, 
 
   try {
     const androidmanagement = await getAndroidManagementClient()
+    const deviceName = `${enterpriseName}/devices/${deviceId}`
 
-    // Create a device-specific policy name
-    const devicePolicyId = `device-${deviceId}-policy`
-    const policyName = `${enterpriseName}/policies/${devicePolicyId}`
+    // Get the device's current policy
+    const device = await androidmanagement.enterprises.devices.get({
+      name: deviceName,
+    })
 
-    // Get current default policy to merge settings
-    const defaultPolicyName = `${enterpriseName}/policies/default-policy`
-    let basePolicy: Record<string, unknown> & { applications?: unknown[] } = {}
+    const currentPolicyName = device.data.policyName || `${enterpriseName}/policies/default-policy`
 
+    // Get the current policy
+    let currentPolicy: Record<string, unknown> & { applications?: unknown[] } = {}
     try {
-      const existingPolicy = await androidmanagement.enterprises.policies.get({
-        name: defaultPolicyName,
+      const policyResponse = await androidmanagement.enterprises.policies.get({
+        name: currentPolicyName,
       })
-      basePolicy = existingPolicy.data as Record<string, unknown> & { applications?: unknown[] }
+      currentPolicy = policyResponse.data as Record<string, unknown> & { applications?: unknown[] }
     } catch (err) {
-      // Default policy might not exist, use minimal policy
-      console.log('Using minimal base policy')
+      console.log('Could not get current policy, using minimal policy')
     }
 
-    // Create/update device-specific policy with the app
-    const existingApps = Array.isArray(basePolicy.applications) ? basePolicy.applications : []
+    // Check if app is already in the policy
+    const existingApps = Array.isArray(currentPolicy.applications) ? currentPolicy.applications : []
+    const appAlreadyExists = existingApps.some((app: any) => app.packageName === packageName)
 
-    const policyWithApp = {
-      ...basePolicy,
+    if (appAlreadyExists) {
+      return {
+        success: true,
+        message: 'Application is already installed or scheduled for installation.',
+      }
+    }
+
+    // Add the new app to the policy
+    const updatedPolicy = {
+      ...currentPolicy,
       applications: [
-        // Include existing apps from base policy
         ...existingApps,
-        // Add the new app
         {
           packageName: packageName,
           installType: 'FORCE_INSTALLED' as const,
@@ -351,19 +359,10 @@ export async function installAppOnDevice(deviceId: string, packageName: string, 
       ],
     }
 
-    // Create or update the policy
+    // Update the policy (this automatically applies to all devices using it)
     await androidmanagement.enterprises.policies.patch({
-      name: policyName,
-      requestBody: policyWithApp as Record<string, unknown>,
-    })
-
-    // Apply the policy to the device
-    const deviceName = `${enterpriseName}/devices/${deviceId}`
-    await androidmanagement.enterprises.devices.patch({
-      name: deviceName,
-      requestBody: {
-        policyName: policyName,
-      },
+      name: currentPolicyName,
+      requestBody: updatedPolicy as Record<string, unknown>,
     })
 
     return {
