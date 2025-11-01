@@ -147,10 +147,7 @@ export async function createPolicy(policyId: string = 'default-policy') {
   }
 
   const defaultPolicy = {
-    passwordRequirements: {
-      passwordMinimumLength: 6,
-      passwordQuality: 'NUMERIC',
-    },
+    // No password requirements - device can be unlocked without PIN
     statusReportingSettings: {
       applicationReportsEnabled: true,
       deviceSettingsEnabled: true,
