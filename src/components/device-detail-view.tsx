@@ -303,18 +303,14 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
             </span>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3 text-sm">
-            <div>
-              <dt className="text-muted-foreground mb-1">Device Model</dt>
-              <dd className="font-medium">{deviceClient.manufacturer} {deviceClient.model}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground mb-1">Android Version</dt>
-              <dd className="font-medium">{deviceClient.androidVersion}</dd>
-            </div>
+          <div className="grid gap-4 md:grid-cols-2 text-sm">
             <div>
               <dt className="text-muted-foreground mb-1">Check-in Interval</dt>
               <dd className="font-medium">{deviceClient.pingInterval} minutes</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground mb-1">Registered</dt>
+              <dd className="font-medium">{formatTimestamp(deviceClient.registeredAt)}</dd>
             </div>
           </div>
 
