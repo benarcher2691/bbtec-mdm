@@ -6,6 +6,7 @@ import { UserButton } from "@clerk/nextjs"
 import { Menu } from "lucide-react"
 import { Sidebar } from "./sidebar"
 import { useSidebar } from "./dashboard-layout"
+import packageJson from "../../package.json"
 
 export function Navbar() {
   const { toggle } = useSidebar()
@@ -44,7 +45,7 @@ export function Navbar() {
         {/* Branding */}
         <div className="flex items-center gap-2">
           <span className="text-lg font-semibold">bbtec-mdm</span>
-          <span className="text-xs text-muted-foreground">v0.0.1</span>
+          <span className="text-xs text-muted-foreground">v{packageJson.version}</span>
         </div>
 
         {/* Spacer */}
