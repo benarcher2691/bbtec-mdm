@@ -203,6 +203,8 @@ export async function createPolicy(policyId: string = 'default-policy') {
     installUnknownSourcesAllowed: true,
     // Allow USB debugging (for ADB sideloading during testing)
     debuggingFeaturesAllowed: true,
+    // Allow access to developer settings
+    developerSettings: 'DEVELOPER_SETTINGS_ALLOWED',
     statusReportingSettings: {
       applicationReportsEnabled: true,
       deviceSettingsEnabled: true,
