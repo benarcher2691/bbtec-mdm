@@ -1,6 +1,7 @@
 package com.bbtec.mdm.client
 
 import android.os.Bundle
+import android.util.Log
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import java.text.SimpleDateFormat
@@ -12,20 +13,29 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d(TAG, "onCreate called")
         setContentView(R.layout.activity_main)
 
         prefsManager = PreferencesManager(this)
 
         // Register device on first launch
-        if (!prefsManager.isRegistered()) {
+        val isRegistered = prefsManager.isRegistered()
+        Log.d(TAG, "Is registered: $isRegistered")
+        if (!isRegistered) {
+            Log.d(TAG, "Starting device registration...")
             DeviceRegistration(this).registerDevice()
         }
 
         // Start polling service
+        Log.d(TAG, "Starting polling service...")
         PollingService.startService(this)
 
         // Update UI
         updateStatus()
+    }
+
+    companion object {
+        private const val TAG = "MainActivity"
     }
 
     private fun updateStatus() {

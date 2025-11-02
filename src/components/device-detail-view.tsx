@@ -314,51 +314,58 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
 
       <Separator />
 
-      {/* Client App Status */}
-      {deviceClient && (
-        <div className="rounded-lg border bg-card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className={`h-3 w-3 rounded-full ${getConnectionStatusColor(deviceClient.lastHeartbeat)}`} />
-              <h3 className="font-semibold">Client App Connected</h3>
-            </div>
+      {/* Client App Status - Always visible */}
+      <div className="rounded-lg border bg-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className={`h-3 w-3 rounded-full ${deviceClient ? getConnectionStatusColor(deviceClient.lastHeartbeat) : 'bg-gray-400'}`} />
+            <h3 className="font-semibold">
+              {deviceClient ? 'Client App Connected' : 'Waiting for Client Connection'}
+            </h3>
+          </div>
+          {deviceClient && (
             <span className="text-xs text-muted-foreground">
               Last check-in: {formatTimestamp(deviceClient.lastHeartbeat)}
             </span>
-          </div>
+          )}
+        </div>
 
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="pingInterval" className="text-sm text-muted-foreground">
-                Check-in Interval (1-180 minutes)
-              </Label>
-              <div className="flex gap-2 mt-2">
-                <Input
-                  id="pingInterval"
-                  type="number"
-                  min="1"
-                  max="180"
-                  value={pingInterval}
-                  onChange={(e) => setPingInterval(Number(e.target.value))}
-                  className="w-24"
-                />
-                <Button
-                  onClick={handleUpdateInterval}
-                  disabled={updatingInterval || pingInterval < 1 || pingInterval > 180}
-                  size="sm"
-                >
-                  {updatingInterval ? 'Updating...' : 'Update'}
-                </Button>
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="pingInterval" className="text-sm text-muted-foreground">
+              Check-in Interval (1-180 minutes)
+            </Label>
+            <div className="flex gap-2 mt-2">
+              <Input
+                id="pingInterval"
+                type="number"
+                min="1"
+                max="180"
+                value={pingInterval}
+                onChange={(e) => setPingInterval(Number(e.target.value))}
+                className="w-24"
+              />
+              <Button
+                onClick={handleUpdateInterval}
+                disabled={updatingInterval || pingInterval < 1 || pingInterval > 180}
+                size="sm"
+              >
+                {updatingInterval ? 'Updating...' : 'Update'}
+              </Button>
+              {deviceClient && (
                 <span className="text-sm text-muted-foreground self-center">
                   Current: {deviceClient.pingInterval} min
                 </span>
-              </div>
+              )}
             </div>
+          </div>
+          {deviceClient && (
             <div className="text-sm">
               <span className="text-muted-foreground">Registered: </span>
               <span className="font-medium">{formatTimestamp(deviceClient.registeredAt)}</span>
             </div>
-          </div>
+          )}
+        </div>
 
           {pendingInstalls && pendingInstalls.length > 0 && (
             <div className="mt-4 pt-4 border-t">
@@ -386,8 +393,7 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
               </div>
             </div>
           )}
-        </div>
-      )}
+      </div>
 
       {/* Device Information Grid */}
       <div className="grid gap-6 md:grid-cols-2">
