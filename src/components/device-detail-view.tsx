@@ -99,13 +99,18 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
     return `${year}-${month}-${day} ${hour}:${minute}:${second}`
   }
 
-  const getConnectionStatusColor = (lastHeartbeat: number) => {
+  const getConnectionStatusColor = (lastHeartbeat: number, pingInterval: number) => {
     const now = Date.now()
     const diff = now - lastHeartbeat
     const minutes = Math.floor(diff / 60000)
 
-    if (minutes < 1) return 'bg-green-500'
-    if (minutes <= 3) return 'bg-yellow-500'
+    // Green: Within expected interval (plus small grace period)
+    if (minutes <= pingInterval + 2) return 'bg-green-500'
+
+    // Yellow: Slightly overdue (up to 1.5x the interval)
+    if (minutes <= pingInterval * 1.5) return 'bg-yellow-500'
+
+    // Red: Very overdue (> 1.5x the interval)
     return 'bg-red-500'
   }
 
@@ -318,7 +323,7 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
       <div className="rounded-lg border bg-card p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <div className={`h-3 w-3 rounded-full ${deviceClient ? getConnectionStatusColor(deviceClient.lastHeartbeat) : 'bg-gray-400'}`} />
+            <div className={`h-3 w-3 rounded-full ${deviceClient ? getConnectionStatusColor(deviceClient.lastHeartbeat, deviceClient.pingInterval) : 'bg-gray-400'}`} />
             <h3 className="font-semibold">
               {deviceClient ? 'Client App Connected' : 'Waiting for Client Connection'}
             </h3>
