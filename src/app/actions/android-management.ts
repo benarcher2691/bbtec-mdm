@@ -201,10 +201,10 @@ export async function createPolicy(policyId: string = 'default-policy') {
     },
     // Allow installation from unknown sources (required for private APKs)
     installUnknownSourcesAllowed: true,
-    // Allow USB debugging (for ADB sideloading during testing)
-    debuggingFeaturesAllowed: true,
-    // Allow access to developer settings
-    developerSettings: 'DEVELOPER_SETTINGS_ALLOWED',
+    // Allow USB debugging and developer settings (modern API - replaces deprecated debuggingFeaturesAllowed)
+    advancedSecurityOverrides: {
+      developerSettings: 'DEVELOPER_SETTINGS_ALLOWED',
+    },
     statusReportingSettings: {
       applicationReportsEnabled: true,
       deviceSettingsEnabled: true,
