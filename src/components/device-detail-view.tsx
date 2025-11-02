@@ -1,10 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { useQuery } from "convex/react"
+import { useQuery, useMutation } from "convex/react"
 import { api } from "../../convex/_generated/api"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Dialog,
   DialogContent,
@@ -52,6 +54,10 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
   const [installing, setInstalling] = useState(false)
   const [installError, setInstallError] = useState<string | null>(null)
   const [installSuccess, setInstallSuccess] = useState(false)
+  const [pingInterval, setPingInterval] = useState<number>(15)
+  const [updatingInterval, setUpdatingInterval] = useState(false)
+
+  const updatePingInterval = useMutation(api.deviceClients.updatePingInterval)
 
   const getDeviceId = (deviceName: string) => {
     const parts = deviceName.split('/')
@@ -84,23 +90,23 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
 
   const formatTimestamp = (timestamp: number) => {
     const date = new Date(timestamp)
-    const now = Date.now()
-    const diff = now - timestamp
-    const minutes = Math.floor(diff / 60000)
-
-    if (minutes < 1) return 'Just now'
-    if (minutes < 60) return `${minutes}m ago`
-
-    const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}h ago`
-
-    // Show full date and time for older entries
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     const hour = String(date.getHours()).padStart(2, '0')
     const minute = String(date.getMinutes()).padStart(2, '0')
-    return `${year}-${month}-${day} ${hour}:${minute}`
+    const second = String(date.getSeconds()).padStart(2, '0')
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`
+  }
+
+  const getConnectionStatusColor = (lastHeartbeat: number) => {
+    const now = Date.now()
+    const diff = now - lastHeartbeat
+    const minutes = Math.floor(diff / 60000)
+
+    if (minutes < 1) return 'bg-green-500'
+    if (minutes <= 3) return 'bg-yellow-500'
+    return 'bg-red-500'
   }
 
   const getStatusColor = (state: string) => {
@@ -113,6 +119,23 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
         return 'text-red-600 bg-red-50'
       default:
         return 'text-gray-600 bg-gray-50'
+    }
+  }
+
+  const handleUpdateInterval = async () => {
+    if (!device.name) return
+
+    setUpdatingInterval(true)
+    try {
+      const deviceId = getDeviceId(device.name)
+      await updatePingInterval({
+        deviceId,
+        pingInterval,
+      })
+    } catch (error) {
+      console.error('Failed to update interval:', error)
+    } finally {
+      setUpdatingInterval(false)
     }
   }
 
@@ -296,26 +319,44 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
         <div className="rounded-lg border bg-card p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <div className={`h-3 w-3 rounded-full ${
-                deviceClient.status === 'online' ? 'bg-green-500' : 'bg-gray-400'
-              }`} />
-              <h3 className="font-semibold">
-                bbtec-mdm Client {deviceClient.status === 'online' ? 'Connected' : 'Offline'}
-              </h3>
+              <div className={`h-3 w-3 rounded-full ${getConnectionStatusColor(deviceClient.lastHeartbeat)}`} />
+              <h3 className="font-semibold">Client App Connected</h3>
             </div>
             <span className="text-xs text-muted-foreground">
               Last check-in: {formatTimestamp(deviceClient.lastHeartbeat)}
             </span>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 text-sm">
+          <div className="space-y-4">
             <div>
-              <dt className="text-muted-foreground mb-1">Check-in Interval</dt>
-              <dd className="font-medium">{deviceClient.pingInterval} minutes</dd>
+              <Label htmlFor="pingInterval" className="text-sm text-muted-foreground">
+                Check-in Interval (1-180 minutes)
+              </Label>
+              <div className="flex gap-2 mt-2">
+                <Input
+                  id="pingInterval"
+                  type="number"
+                  min="1"
+                  max="180"
+                  value={pingInterval}
+                  onChange={(e) => setPingInterval(Number(e.target.value))}
+                  className="w-24"
+                />
+                <Button
+                  onClick={handleUpdateInterval}
+                  disabled={updatingInterval || pingInterval < 1 || pingInterval > 180}
+                  size="sm"
+                >
+                  {updatingInterval ? 'Updating...' : 'Update'}
+                </Button>
+                <span className="text-sm text-muted-foreground self-center">
+                  Current: {deviceClient.pingInterval} min
+                </span>
+              </div>
             </div>
-            <div>
-              <dt className="text-muted-foreground mb-1">Registered</dt>
-              <dd className="font-medium">{formatTimestamp(deviceClient.registeredAt)}</dd>
+            <div className="text-sm">
+              <span className="text-muted-foreground">Registered: </span>
+              <span className="font-medium">{formatTimestamp(deviceClient.registeredAt)}</span>
             </div>
           </div>
 

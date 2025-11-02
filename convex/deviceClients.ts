@@ -114,3 +114,40 @@ export const getByAndroidDeviceId = query({
       .first()
   },
 })
+
+/**
+ * Update ping interval for a device
+ */
+export const updatePingInterval = mutation({
+  args: {
+    deviceId: v.string(),
+    pingInterval: v.number(),
+  },
+  handler: async (ctx, args) => {
+    // Check auth
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) {
+      throw new Error("Unauthorized")
+    }
+
+    // Validate interval is between 1 and 180 minutes
+    if (args.pingInterval < 1 || args.pingInterval > 180) {
+      throw new Error("Ping interval must be between 1 and 180 minutes")
+    }
+
+    const device = await ctx.db
+      .query("deviceClients")
+      .withIndex("by_device", (q) => q.eq("deviceId", args.deviceId))
+      .first()
+
+    if (!device) {
+      throw new Error("Device not found")
+    }
+
+    await ctx.db.patch(device._id, {
+      pingInterval: args.pingInterval,
+    })
+
+    return { success: true }
+  },
+})
