@@ -44,6 +44,7 @@ export function Navbar() {
         {/* Branding */}
         <div className="flex items-center gap-2">
           <span className="text-lg font-semibold">bbtec-mdm</span>
+          <span className="text-xs text-muted-foreground">v0.0.1</span>
         </div>
 
         {/* Spacer */}
