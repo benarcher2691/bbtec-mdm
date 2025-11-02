@@ -33,6 +33,14 @@ class ApiClient(private val context: Context) {
             override fun onResponse(call: Call, response: Response) {
                 if (response.isSuccessful) {
                     prefsManager.setLastHeartbeat(System.currentTimeMillis())
+
+                    // Parse response to get updated ping interval
+                    val body = response.body?.string()
+                    val result = gson.fromJson(body, HeartbeatResponse::class.java)
+                    result.pingInterval?.let { interval ->
+                        prefsManager.setPingInterval(interval)
+                        Log.d("ApiClient", "Updated ping interval to $interval minutes")
+                    }
                 }
             }
 
@@ -92,5 +100,10 @@ class ApiClient(private val context: Context) {
 
     data class CommandsResponse(
         val commands: List<Command>
+    )
+
+    data class HeartbeatResponse(
+        val success: Boolean,
+        val pingInterval: Int?
     )
 }

@@ -13,7 +13,15 @@ export async function POST(request: NextRequest) {
       deviceId,
     })
 
-    return NextResponse.json({ success: true })
+    // Get the device's current ping interval
+    const device = await convex.query(api.deviceClients.getByAndroidDeviceId, {
+      androidDeviceId: deviceId,
+    })
+
+    return NextResponse.json({
+      success: true,
+      pingInterval: device?.pingInterval || 15,
+    })
   } catch (error) {
     console.error('Heartbeat error:', error)
     return NextResponse.json(
