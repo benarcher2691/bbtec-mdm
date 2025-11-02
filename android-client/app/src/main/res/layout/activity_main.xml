@@ -9,7 +9,7 @@
         android:id="@+id/statusText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="36dp"
         android:text="Connection Status"
         android:textSize="18sp"
         android:textStyle="bold" />
