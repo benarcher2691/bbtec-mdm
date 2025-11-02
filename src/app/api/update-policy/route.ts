@@ -12,7 +12,7 @@ export async function GET() {
     if (result.success) {
       return NextResponse.json({
         success: true,
-        message: 'Policy updated successfully. No password will be required for new enrollments.',
+        message: 'Policy updated successfully. USB debugging and unknown sources enabled for ADB sideloading.',
         policy: result.policy,
       })
     } else {
