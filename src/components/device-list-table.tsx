@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -58,14 +58,27 @@ export function DeviceListTable() {
   const [deleting, setDeleting] = useState(false)
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
   const pathname = usePathname()
+  const searchParams = useSearchParams()
 
   // Reset selected device and reload list when navigating to /management/devices
   useEffect(() => {
     if (pathname === '/management/devices') {
+      const deviceId = searchParams.get('deviceId')
+
+      // If deviceId query param exists, auto-select that device
+      if (deviceId && devices.length > 0) {
+        const device = devices.find(d => d.name?.endsWith(deviceId))
+        if (device) {
+          setSelectedDevice(device)
+          return // Don't reload if we're selecting a device
+        }
+      }
+
+      // Otherwise reset selection and reload
       setSelectedDevice(null)
       loadDevices()
     }
-  }, [pathname])
+  }, [pathname, searchParams, devices])
 
   const loadDevices = async () => {
     setLoading(true)

@@ -87,9 +87,13 @@ export function QRCodeGenerator() {
   }
 
   const handleGoToDevice = () => {
-    // Navigate to devices page
-    // The device will be shown in the list
-    router.push('/management/devices')
+    // Navigate to device detail page
+    if (enrolledDevice?.name) {
+      const deviceId = enrolledDevice.name.split('/').pop()
+      router.push(`/management/devices?deviceId=${deviceId}`)
+    } else {
+      router.push('/management/devices')
+    }
   }
 
   // Cleanup polling on unmount
