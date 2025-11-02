@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -56,6 +57,14 @@ export function DeviceListTable() {
   const [deleteWithWipe, setDeleteWithWipe] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
+  const pathname = usePathname()
+
+  // Reset selected device when navigating to /management/devices
+  useEffect(() => {
+    if (pathname === '/management/devices') {
+      setSelectedDevice(null)
+    }
+  }, [pathname])
 
   const loadDevices = async () => {
     setLoading(true)
