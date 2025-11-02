@@ -3,13 +3,11 @@ import { mutation, query } from "./_generated/server"
 
 /**
  * Register a new device client
+ * Device metadata comes from Android Management API - we only track connection status
  */
 export const registerDevice = mutation({
   args: {
     deviceId: v.string(),
-    model: v.string(),
-    manufacturer: v.string(),
-    androidVersion: v.string(),
   },
   handler: async (ctx, args) => {
     // Check if device already registered
@@ -19,7 +17,7 @@ export const registerDevice = mutation({
       .first()
 
     if (existing) {
-      // Update registration
+      // Update heartbeat
       await ctx.db.patch(existing._id, {
         lastHeartbeat: Date.now(),
         status: "online",
@@ -27,16 +25,12 @@ export const registerDevice = mutation({
       return existing._id
     }
 
-    // New registration
+    // New registration - just establish polling connection
     return await ctx.db.insert("deviceClients", {
       deviceId: args.deviceId,
-      userId: "system", // TODO: Associate with actual user via QR enrollment
-      model: args.model,
-      manufacturer: args.manufacturer,
-      androidVersion: args.androidVersion,
       lastHeartbeat: Date.now(),
       status: "online",
-      pingInterval: 15,
+      pingInterval: 15, // Check in every 15 minutes
       registeredAt: Date.now(),
     })
   },

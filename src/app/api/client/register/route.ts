@@ -7,13 +7,17 @@ const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { deviceId, model, manufacturer, androidVersion } = body
+    const { deviceId } = body
+
+    if (!deviceId) {
+      return NextResponse.json(
+        { error: 'deviceId is required' },
+        { status: 400 }
+      )
+    }
 
     await convex.mutation(api.deviceClients.registerDevice, {
       deviceId,
-      model,
-      manufacturer,
-      androidVersion,
     })
 
     return NextResponse.json({ success: true })

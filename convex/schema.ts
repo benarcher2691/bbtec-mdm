@@ -56,19 +56,14 @@ export default defineSchema({
   }).index("by_user", ["userId"])
     .index("by_package", ["packageName"]),
 
-  // Registered client devices
+  // Registered client devices (minimal - device metadata comes from Android Management API)
   deviceClients: defineTable({
-    deviceId: v.string(),        // Android device ID
-    userId: v.string(),          // Clerk user (owner)
-    model: v.string(),
-    manufacturer: v.string(),
-    androidVersion: v.string(),
-    lastHeartbeat: v.number(),
+    deviceId: v.string(),        // Android device ID (links to Android Management API device)
+    lastHeartbeat: v.number(),   // Last time device checked in
     status: v.string(),          // "online", "offline"
-    pingInterval: v.number(),     // minutes
-    registeredAt: v.number(),
-  }).index("by_device", ["deviceId"])
-    .index("by_user", ["userId"]),
+    pingInterval: v.number(),    // Check-in interval in minutes
+    registeredAt: v.number(),    // First registration timestamp
+  }).index("by_device", ["deviceId"]),
 
   // Installation command queue
   installCommands: defineTable({

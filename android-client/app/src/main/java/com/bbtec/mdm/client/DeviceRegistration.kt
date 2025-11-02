@@ -20,12 +20,9 @@ class DeviceRegistration(private val context: Context) {
             Settings.Secure.ANDROID_ID
         )
 
+        // Only send device ID - metadata comes from Android Management API
         val json = gson.toJson(mapOf(
-            "deviceId" to deviceId,
-            "model" to Build.MODEL,
-            "manufacturer" to Build.MANUFACTURER,
-            "androidVersion" to Build.VERSION.RELEASE,
-            "registeredAt" to System.currentTimeMillis()
+            "deviceId" to deviceId
         ))
 
         val request = Request.Builder()
