@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useQuery, useMutation } from "convex/react"
 import { api } from "../../convex/_generated/api"
 import { Button } from "@/components/ui/button"
@@ -16,7 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { ArrowLeft, Smartphone, Calendar, Wifi, HardDrive, Package, Download, AlertCircle, Check } from "lucide-react"
+import { Smartphone, Calendar, Wifi, HardDrive, Package, Download, AlertCircle, Check } from "lucide-react"
 import { installAppOnDevice } from "@/app/actions/android-management"
 import type { Id } from "../../convex/_generated/dataModel"
 
@@ -75,6 +75,13 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
   const pendingInstalls = useQuery(api.installCommands.getByDevice, {
     deviceId: device.name ? getDeviceId(device.name) : ''
   })
+
+  // Sync ping interval from database when deviceClient loads
+  useEffect(() => {
+    if (deviceClient?.pingInterval) {
+      setPingInterval(deviceClient.pingInterval)
+    }
+  }, [deviceClient?.pingInterval])
 
   const formatDate = (timestamp: string) => {
     if (!timestamp) return 'N/A'
@@ -187,12 +194,8 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header with Back Button */}
+      {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="outline" size="sm" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to List
-        </Button>
         <div className="flex-1">
           <h2 className="text-2xl font-bold">
             {device.hardwareInfo?.model || 'Unknown Device'}
