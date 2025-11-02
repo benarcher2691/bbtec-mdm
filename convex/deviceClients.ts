@@ -17,14 +17,18 @@ export const registerDevice = mutation({
       .first()
 
     if (existing) {
-      // Update heartbeat - return existing token
+      // Generate token if missing (migration case)
+      const apiToken = existing.apiToken || crypto.randomUUID()
+
+      // Update heartbeat and ensure token exists
       await ctx.db.patch(existing._id, {
         lastHeartbeat: Date.now(),
         status: "online",
+        apiToken,
       })
       return {
         deviceClientId: existing._id,
-        apiToken: existing.apiToken,
+        apiToken,
       }
     }
 
