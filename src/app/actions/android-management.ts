@@ -215,10 +215,12 @@ export async function createPolicy(policyId: string = 'default-policy') {
         packageName: 'com.android.chrome',
         installType: 'AVAILABLE',
       },
-      {
-        packageName: 'com.bbtec.mdm.client',
-        installType: 'FORCE_INSTALLED',
-      },
+      // Temporarily removed to allow ADB updates during testing
+      // Uncomment after updating app via ADB
+      // {
+      //   packageName: 'com.bbtec.mdm.client',
+      //   installType: 'FORCE_INSTALLED',
+      // },
     ],
   }
 
