@@ -12,10 +12,27 @@ const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
  * Initialize Android Management API client (server-side only)
  */
 async function getAndroidManagementClient() {
-  // Support both file-based and JSON env var credentials
-  const credentials = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
-    ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON)
-    : undefined
+  // Support multiple credential methods
+  let credentials = undefined
+
+  // Try base64-encoded credentials first (most reliable for env vars)
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_BASE64) {
+    try {
+      const decoded = Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf-8')
+      credentials = JSON.parse(decoded)
+    } catch (error) {
+      console.error('Failed to parse GOOGLE_SERVICE_ACCOUNT_BASE64:', error)
+    }
+  }
+  // Try JSON string (legacy support)
+  else if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    try {
+      const jsonString = process.env.GOOGLE_SERVICE_ACCOUNT_JSON.trim()
+      credentials = JSON.parse(jsonString)
+    } catch (error) {
+      console.error('Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON:', error)
+    }
+  }
 
   const googleAuth = new google.auth.GoogleAuth({
     credentials: credentials,
