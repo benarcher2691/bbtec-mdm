@@ -13,8 +13,8 @@ class ApiClient(private val context: Context) {
     private val gson = Gson()
     private val prefsManager = PreferencesManager(context)
 
-    // TODO: Replace with actual server URL
-    private val baseUrl = "https://your-server.com/api/client"
+    // Production server URL
+    private val baseUrl = "https://bbtec-mdm.vercel.app/api/client"
 
     fun sendHeartbeat() {
         val deviceId = prefsManager.getDeviceId()

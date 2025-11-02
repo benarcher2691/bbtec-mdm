@@ -29,7 +29,7 @@ class DeviceRegistration(private val context: Context) {
         ))
 
         val request = Request.Builder()
-            .url("https://your-server.com/api/client/register")
+            .url("https://bbtec-mdm.vercel.app/api/client/register")
             .post(json.toRequestBody("application/json".toMediaType()))
             .build()
 
