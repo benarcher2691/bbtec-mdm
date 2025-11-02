@@ -59,10 +59,11 @@ export function DeviceListTable() {
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
   const pathname = usePathname()
 
-  // Reset selected device when navigating to /management/devices
+  // Reset selected device and reload list when navigating to /management/devices
   useEffect(() => {
     if (pathname === '/management/devices') {
       setSelectedDevice(null)
+      loadDevices()
     }
   }, [pathname])
 
