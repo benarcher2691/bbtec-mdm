@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity() {
         val statusText = findViewById<TextView>(R.id.statusText)
         val lastHeartbeatText = findViewById<TextView>(R.id.lastHeartbeat)
         val pingIntervalText = findViewById<TextView>(R.id.pingInterval)
+        val versionText = findViewById<TextView>(R.id.versionText)
 
         val lastHeartbeat = prefsManager.getLastHeartbeat()
         val pingInterval = prefsManager.getPingInterval()
@@ -49,6 +50,14 @@ class MainActivity : AppCompatActivity() {
         statusText.text = getString(R.string.status_connected)
         lastHeartbeatText.text = getString(R.string.last_checkin, formatTime(lastHeartbeat))
         pingIntervalText.text = getString(R.string.checkin_interval, pingInterval)
+
+        // Get version from package info
+        val versionName = try {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        } catch (e: Exception) {
+            "Unknown"
+        }
+        versionText.text = "Version: $versionName"
     }
 
     private fun formatTime(timestamp: Long): String {

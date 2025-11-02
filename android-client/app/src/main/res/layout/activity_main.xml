@@ -30,4 +30,13 @@
         android:text="Check-in interval: 15 minutes"
         android:textSize="14sp" />
 
+    <TextView
+        android:id="@+id/versionText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Version: 0.0.0"
+        android:textSize="12sp"
+        android:textColor="#888888" />
+
 </LinearLayout>
