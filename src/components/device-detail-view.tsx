@@ -52,14 +52,23 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
   const [installing, setInstalling] = useState(false)
   const [installError, setInstallError] = useState<string | null>(null)
   const [installSuccess, setInstallSuccess] = useState(false)
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
-
-  const applications = useQuery(api.applications.listApplications)
 
   const getDeviceId = (deviceName: string) => {
     const parts = deviceName.split('/')
     return parts[parts.length - 1]
   }
+
+  const applications = useQuery(api.applications.listApplications)
+
+  // Get client app connection status
+  const deviceClient = useQuery(api.deviceClients.getByAndroidDeviceId, {
+    androidDeviceId: device.name ? getDeviceId(device.name) : ''
+  })
+
+  // Get pending installation commands
+  const pendingInstalls = useQuery(api.installCommands.getByDevice, {
+    deviceId: device.name ? getDeviceId(device.name) : ''
+  })
 
   const formatDate = (timestamp: string) => {
     if (!timestamp) return 'N/A'
@@ -71,6 +80,22 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
     if (!bytes) return 'N/A'
     const gb = parseInt(bytes) / (1024 * 1024 * 1024)
     return `${gb.toFixed(1)} GB`
+  }
+
+  const formatTimestamp = (timestamp: number) => {
+    const date = new Date(timestamp)
+    const now = Date.now()
+    const diff = now - timestamp
+    const minutes = Math.floor(diff / 60000)
+
+    if (minutes < 1) return 'Just now'
+    if (minutes < 60) return `${minutes}m ago`
+
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
   }
 
   const getStatusColor = (state: string) => {
@@ -111,16 +136,12 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
 
       if (result.success) {
         setInstallSuccess(true)
-        if (result.downloadUrl) {
-          setDownloadUrl(result.downloadUrl)
-        } else {
-          // Auto-close only if no download URL (Google Play apps)
-          setTimeout(() => {
-            setInstallDialogOpen(false)
-            setInstallSuccess(false)
-            setSelectedApp(null)
-          }, 2000)
-        }
+        // Auto-close after showing success message
+        setTimeout(() => {
+          setInstallDialogOpen(false)
+          setInstallSuccess(false)
+          setSelectedApp(null)
+        }, 3000)
       } else {
         setInstallError(result.error || 'Failed to install app')
       }
@@ -220,33 +241,14 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
                     <Check className="h-5 w-5 text-green-600 mt-0.5" />
                     <div className="flex-1">
                       <p className="text-sm text-green-700 font-medium mb-2">
-                        Application added to policy
+                        Installation queued successfully!
                       </p>
-                      {downloadUrl ? (
-                        <>
-                          <p className="text-sm text-green-700 mb-3">
-                            <strong>Manual installation required:</strong> Self-hosted APKs cannot be automatically installed via Android Management API.
-                          </p>
-                          <div className="bg-white rounded p-3 border border-green-200">
-                            <p className="text-xs font-medium text-green-900 mb-2">Download Link:</p>
-                            <a
-                              href={downloadUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-blue-600 hover:text-blue-800 underline break-all"
-                            >
-                              {downloadUrl}
-                            </a>
-                          </div>
-                          <p className="text-xs text-green-600 mt-3">
-                            Users will need to enable "Unknown Sources" and download this APK manually.
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-sm text-green-700">
-                          If this is a Google Play app, it will install automatically within a few minutes.
-                        </p>
-                      )}
+                      <p className="text-sm text-green-700">
+                        The app will install silently when the device checks in (within 15 minutes).
+                      </p>
+                      <p className="text-xs text-green-600 mt-2">
+                        Check the &quot;Pending Installations&quot; section on the device detail page to monitor progress.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -283,6 +285,67 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
       </div>
 
       <Separator />
+
+      {/* Client App Status */}
+      {deviceClient && (
+        <div className="rounded-lg border bg-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className={`h-3 w-3 rounded-full ${
+                deviceClient.status === 'online' ? 'bg-green-500' : 'bg-gray-400'
+              }`} />
+              <h3 className="font-semibold">
+                bbtec-mdm Client {deviceClient.status === 'online' ? 'Connected' : 'Offline'}
+              </h3>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              Last check-in: {formatTimestamp(deviceClient.lastHeartbeat)}
+            </span>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3 text-sm">
+            <div>
+              <dt className="text-muted-foreground mb-1">Device Model</dt>
+              <dd className="font-medium">{deviceClient.manufacturer} {deviceClient.model}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground mb-1">Android Version</dt>
+              <dd className="font-medium">{deviceClient.androidVersion}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground mb-1">Check-in Interval</dt>
+              <dd className="font-medium">{deviceClient.pingInterval} minutes</dd>
+            </div>
+          </div>
+
+          {pendingInstalls && pendingInstalls.length > 0 && (
+            <div className="mt-4 pt-4 border-t">
+              <div className="flex items-center gap-2 mb-3">
+                <Package className="h-4 w-4 text-blue-600" />
+                <h4 className="font-medium text-sm">Pending Installations ({pendingInstalls.length})</h4>
+              </div>
+              <div className="space-y-2">
+                {pendingInstalls.slice(0, 5).map((cmd) => (
+                  <div key={cmd._id} className="flex items-center justify-between p-2 bg-blue-50 rounded text-xs">
+                    <div>
+                      <p className="font-medium">{cmd.appName}</p>
+                      <p className="text-muted-foreground">{cmd.packageName}</p>
+                    </div>
+                    <span className={`px-2 py-1 rounded ${
+                      cmd.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      cmd.status === 'completed' ? 'bg-green-100 text-green-800' :
+                      cmd.status === 'failed' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {cmd.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Device Information Grid */}
       <div className="grid gap-6 md:grid-cols-2">

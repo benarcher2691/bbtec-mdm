@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">bbtec-mdm Client</string>
+    <string name="status_connected">Connected to bbtec-mdm</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="last_checkin">Last check-in: %s</string>
+    <string name="checkin_interval">Check-in interval: %d minutes</string>
+    <string name="never">Never</string>
+</resources>

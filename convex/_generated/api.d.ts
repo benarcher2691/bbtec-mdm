@@ -10,7 +10,9 @@
 
 import type * as applications from "../applications.js";
 import type * as audit from "../audit.js";
+import type * as deviceClients from "../deviceClients.js";
 import type * as devices from "../devices.js";
+import type * as installCommands from "../installCommands.js";
 import type * as preferences from "../preferences.js";
 
 import type {
@@ -30,7 +32,9 @@ import type {
 declare const fullApi: ApiFromModules<{
   applications: typeof applications;
   audit: typeof audit;
+  deviceClients: typeof deviceClients;
   devices: typeof devices;
+  installCommands: typeof installCommands;
   preferences: typeof preferences;
 }>;
 declare const fullApiWithMounts: typeof fullApi;

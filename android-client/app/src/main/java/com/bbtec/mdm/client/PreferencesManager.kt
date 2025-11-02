@@ -1,0 +1,20 @@
+package com.bbtec.mdm.client
+
+import android.content.Context
+
+class PreferencesManager(context: Context) {
+
+    private val prefs = context.getSharedPreferences("mdm_prefs", Context.MODE_PRIVATE)
+
+    fun isRegistered(): Boolean = prefs.getBoolean("registered", false)
+    fun setRegistered(registered: Boolean) = prefs.edit().putBoolean("registered", registered).apply()
+
+    fun getDeviceId(): String = prefs.getString("device_id", "") ?: ""
+    fun setDeviceId(id: String) = prefs.edit().putString("device_id", id).apply()
+
+    fun getLastHeartbeat(): Long = prefs.getLong("last_heartbeat", 0)
+    fun setLastHeartbeat(timestamp: Long) = prefs.edit().putLong("last_heartbeat", timestamp).apply()
+
+    fun getPingInterval(): Int = prefs.getInt("ping_interval", 15) // Default 15 minutes
+    fun setPingInterval(minutes: Int) = prefs.edit().putInt("ping_interval", minutes).apply()
+}

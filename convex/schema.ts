@@ -55,4 +55,31 @@ export default defineSchema({
     description: v.optional(v.string()),
   }).index("by_user", ["userId"])
     .index("by_package", ["packageName"]),
+
+  // Registered client devices
+  deviceClients: defineTable({
+    deviceId: v.string(),        // Android device ID
+    userId: v.string(),          // Clerk user (owner)
+    model: v.string(),
+    manufacturer: v.string(),
+    androidVersion: v.string(),
+    lastHeartbeat: v.number(),
+    status: v.string(),          // "online", "offline"
+    pingInterval: v.number(),     // minutes
+    registeredAt: v.number(),
+  }).index("by_device", ["deviceId"])
+    .index("by_user", ["userId"]),
+
+  // Installation command queue
+  installCommands: defineTable({
+    deviceId: v.string(),
+    apkUrl: v.string(),
+    packageName: v.string(),
+    appName: v.string(),
+    status: v.string(),          // "pending", "installing", "completed", "failed"
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    completedAt: v.optional(v.number()),
+  }).index("by_device", ["deviceId"])
+    .index("by_status", ["status"]),
 });

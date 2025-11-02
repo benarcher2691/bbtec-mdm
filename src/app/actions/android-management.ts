@@ -3,13 +3,23 @@
 import { google } from 'googleapis'
 import { auth } from '@clerk/nextjs/server'
 import QRCode from 'qrcode'
+import { ConvexHttpClient } from 'convex/browser'
+import { api } from '../../../convex/_generated/api'
+
+const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
 
 /**
  * Initialize Android Management API client (server-side only)
  */
 async function getAndroidManagementClient() {
+  // Support both file-based and JSON env var credentials
+  const credentials = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+    ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON)
+    : undefined
+
   const googleAuth = new google.auth.GoogleAuth({
-    keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    credentials: credentials,
+    keyFile: credentials ? undefined : process.env.GOOGLE_APPLICATION_CREDENTIALS,
     scopes: ['https://www.googleapis.com/auth/androidmanagement'],
   })
 
@@ -302,7 +312,7 @@ export async function deleteDevice(deviceId: string, wipeData: boolean = false) 
 
 /**
  * Server Action: Install an application on a device
- * This creates a device-specific policy that includes the app
+ * Queues the installation command for the bbtec-mdm client app to execute
  */
 export async function installAppOnDevice(deviceId: string, packageName: string, downloadUrl: string) {
   const { userId } = await auth()
@@ -311,83 +321,28 @@ export async function installAppOnDevice(deviceId: string, packageName: string, 
     throw new Error('Unauthorized')
   }
 
-  const enterpriseName = process.env.ENTERPRISE_NAME
-  if (!enterpriseName) {
-    throw new Error('ENTERPRISE_NAME not configured')
-  }
-
   try {
-    const androidmanagement = await getAndroidManagementClient()
-    const deviceName = `${enterpriseName}/devices/${deviceId}`
+    // Extract app name from package name
+    const appName = packageName.split('.').pop() || packageName
 
-    // Get the device's current policy
-    const device = await androidmanagement.enterprises.devices.get({
-      name: deviceName,
+    // Queue installation command for the client app to execute
+    const commandId = await convex.mutation(api.installCommands.create, {
+      deviceId,
+      apkUrl: downloadUrl,
+      packageName,
+      appName,
     })
-
-    const currentPolicyName = device.data.policyName || `${enterpriseName}/policies/default-policy`
-
-    // Get the current policy
-    let currentPolicy: Record<string, unknown> & { applications?: unknown[] } = {}
-    try {
-      const policyResponse = await androidmanagement.enterprises.policies.get({
-        name: currentPolicyName,
-      })
-      currentPolicy = policyResponse.data as Record<string, unknown> & { applications?: unknown[] }
-    } catch (err) {
-      console.log('Could not get current policy, using minimal policy')
-    }
-
-    // Check if app is already in the policy
-    const existingApps = Array.isArray(currentPolicy.applications) ? currentPolicy.applications : []
-    const appAlreadyExists = existingApps.some((app: any) => app.packageName === packageName)
-
-    if (appAlreadyExists) {
-      return {
-        success: true,
-        message: 'Application is already installed or scheduled for installation.',
-      }
-    }
-
-    // NOTE: Android Management API has severe limitations for self-hosted APKs
-    // For now, we'll add the app to the policy and return the download URL
-    // so users can manually install it
-
-    const updatedPolicy = {
-      ...currentPolicy,
-      applications: [
-        ...existingApps,
-        {
-          packageName: packageName,
-          installType: 'AVAILABLE' as const,
-        },
-      ],
-    }
-
-    // Update the policy
-    await androidmanagement.enterprises.policies.patch({
-      name: currentPolicyName,
-      requestBody: updatedPolicy as Record<string, unknown>,
-    })
-
-    // Return different message based on whether we have a download URL
-    if (downloadUrl) {
-      return {
-        success: true,
-        message: 'Note: Self-hosted APKs require manual installation. The app has been added to the policy, but users will need to install it manually from the provided link.',
-        downloadUrl,
-      }
-    }
 
     return {
       success: true,
-      message: 'Application added to policy. If this is a Google Play app, it will install automatically. For self-hosted APKs, manual installation is required.',
+      message: 'Installation queued. The app will install silently when the device checks in (within 15 minutes).',
+      commandId,
     }
   } catch (error) {
-    console.error('Error installing app on device:', error)
+    console.error('Error queueing installation:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to install application',
+      error: error instanceof Error ? error.message : 'Failed to queue installation',
     }
   }
 }
