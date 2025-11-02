@@ -18,6 +18,12 @@ class ApiClient(private val context: Context) {
 
     fun sendHeartbeat() {
         val deviceId = prefsManager.getDeviceId()
+        val apiToken = prefsManager.getApiToken()
+
+        if (apiToken.isEmpty()) {
+            Log.e("ApiClient", "Cannot send heartbeat: No API token")
+            return
+        }
 
         val json = gson.toJson(mapOf(
             "deviceId" to deviceId,
@@ -26,6 +32,7 @@ class ApiClient(private val context: Context) {
 
         val request = Request.Builder()
             .url("$baseUrl/heartbeat")
+            .header("Authorization", "Bearer $apiToken")
             .post(json.toRequestBody("application/json".toMediaType()))
             .build()
 
@@ -51,10 +58,17 @@ class ApiClient(private val context: Context) {
     }
 
     fun getCommands(callback: (List<Command>?) -> Unit) {
-        val deviceId = prefsManager.getDeviceId()
+        val apiToken = prefsManager.getApiToken()
+
+        if (apiToken.isEmpty()) {
+            Log.e("ApiClient", "Cannot get commands: No API token")
+            callback(null)
+            return
+        }
 
         val request = Request.Builder()
-            .url("$baseUrl/commands?deviceId=$deviceId")
+            .url("$baseUrl/commands")
+            .header("Authorization", "Bearer $apiToken")
             .get()
             .build()
 
@@ -77,6 +91,13 @@ class ApiClient(private val context: Context) {
     }
 
     fun reportCommandStatus(commandId: String, status: String, error: String?) {
+        val apiToken = prefsManager.getApiToken()
+
+        if (apiToken.isEmpty()) {
+            Log.e("ApiClient", "Cannot report command status: No API token")
+            return
+        }
+
         val json = gson.toJson(mapOf(
             "commandId" to commandId,
             "status" to status,
@@ -85,6 +106,7 @@ class ApiClient(private val context: Context) {
 
         val request = Request.Builder()
             .url("$baseUrl/command-status")
+            .header("Authorization", "Bearer $apiToken")
             .post(json.toRequestBody("application/json".toMediaType()))
             .build()
 

@@ -16,11 +16,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    await convex.mutation(api.deviceClients.registerDevice, {
+    // Register device and get API token
+    const result = await convex.mutation(api.deviceClients.registerDevice, {
       deviceId,
     })
 
-    return NextResponse.json({ success: true })
+    // Return token to device for future authentication
+    return NextResponse.json({
+      success: true,
+      apiToken: result.apiToken,
+    })
   } catch (error) {
     console.error('Registration error:', error)
     return NextResponse.json(

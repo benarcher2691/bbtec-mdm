@@ -1379,6 +1379,68 @@ Before proceeding to Google Play:
 
 ---
 
+## Security & Authentication
+
+### Current Implementation: API Token Authentication (v0.0.2+)
+
+**Status**: Implemented 2025-11-02
+
+To prevent unauthorized access to client API endpoints (`/api/client/*`), we implemented token-based authentication:
+
+**How it works:**
+1. Device registers via `/api/client/register` (unauthenticated)
+2. Server generates random API token (crypto-secure UUID)
+3. Token returned in registration response
+4. Device stores token in SharedPreferences
+5. All subsequent requests include `Authorization: Bearer <token>` header
+6. Server validates token before processing requests
+
+**Implementation details:**
+- `/api/client/*` routes are public from Clerk's perspective (no Clerk auth)
+- Custom token validation middleware checks `Authorization` header
+- Tokens stored in Convex `deviceClients.apiToken` field
+- Invalid/missing tokens return 401 Unauthorized
+
+**Security properties:**
+- ✅ Prevents fake device registration spam (first registration is rate-limited by device)
+- ✅ Prevents unauthorized heartbeats/command fetching
+- ✅ Each device has unique token
+- ✅ Tokens are cryptographically random (not guessable)
+
+**Known limitations (acceptable for MVP/educational project):**
+- ⚠️ No token rotation/expiry
+- ⚠️ No revocation mechanism (except device deletion)
+- ⚠️ Token transmitted in HTTP headers (HTTPS required)
+- ⚠️ Initial registration is unauthenticated (vulnerable to spam)
+
+### Future Migration: Client Certificate Authentication
+
+**Planned for**: Production deployment / Enterprise use
+
+**Why migrate to certificates:**
+1. **Stronger security**: Mutual TLS with client certificates
+2. **No shared secrets**: Certificates use public/private key pairs
+3. **Industry standard**: Used by enterprise MDM solutions
+4. **Revocation**: Certificate Revocation Lists (CRL) or OCSP
+5. **Rotation**: Certificates have expiry dates, forcing rotation
+
+**Migration plan:**
+1. Generate Certificate Authority (CA) for bbtec-mdm
+2. Issue client certificate during device enrollment
+3. Store certificate in Android KeyStore (hardware-backed)
+4. Configure server to require client certificates
+5. Validate certificates on each request
+6. Implement certificate rotation policy
+
+**References:**
+- Android KeyStore: https://developer.android.com/training/articles/keystore
+- Mutual TLS: https://en.wikipedia.org/wiki/Mutual_authentication
+- X.509 Certificates: https://tools.ietf.org/html/rfc5280
+
+**Timeline**: Implement when moving to production or when security audit requires it.
+
+---
+
 ## Current Blockers
 
 None - ready to proceed with testing and Google Play publishing when ready.

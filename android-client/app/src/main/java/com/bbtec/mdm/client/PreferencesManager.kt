@@ -17,4 +17,7 @@ class PreferencesManager(context: Context) {
 
     fun getPingInterval(): Int = prefs.getInt("ping_interval", 15) // Default 15 minutes
     fun setPingInterval(minutes: Int) = prefs.edit().putInt("ping_interval", minutes).apply()
+
+    fun getApiToken(): String = prefs.getString("api_token", "") ?: ""
+    fun setApiToken(token: String) = prefs.edit().putString("api_token", token).apply()
 }

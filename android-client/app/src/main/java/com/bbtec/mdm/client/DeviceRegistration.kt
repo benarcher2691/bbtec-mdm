@@ -38,9 +38,20 @@ class DeviceRegistration(private val context: Context) {
             override fun onResponse(call: Call, response: Response) {
                 Log.d(TAG, "Registration response: ${response.code}")
                 if (response.isSuccessful) {
-                    prefsManager.setDeviceId(deviceId)
-                    prefsManager.setRegistered(true)
-                    Log.d(TAG, "Registration successful!")
+                    val body = response.body?.string()
+                    Log.d(TAG, "Registration response body: $body")
+
+                    // Parse response to get API token
+                    val result = gson.fromJson(body, RegistrationResponse::class.java)
+
+                    if (result.success && result.apiToken != null) {
+                        prefsManager.setDeviceId(deviceId)
+                        prefsManager.setApiToken(result.apiToken)
+                        prefsManager.setRegistered(true)
+                        Log.d(TAG, "Registration successful! Token saved.")
+                    } else {
+                        Log.e(TAG, "Registration succeeded but no token in response")
+                    }
                 } else {
                     Log.e(TAG, "Registration failed: ${response.body?.string()}")
                 }
@@ -52,6 +63,11 @@ class DeviceRegistration(private val context: Context) {
             }
         })
     }
+
+    data class RegistrationResponse(
+        val success: Boolean,
+        val apiToken: String?
+    )
 
     companion object {
         private const val TAG = "DeviceRegistration"

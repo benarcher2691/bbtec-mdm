@@ -17,22 +17,34 @@ export const registerDevice = mutation({
       .first()
 
     if (existing) {
-      // Update heartbeat
+      // Update heartbeat - return existing token
       await ctx.db.patch(existing._id, {
         lastHeartbeat: Date.now(),
         status: "online",
       })
-      return existing._id
+      return {
+        deviceClientId: existing._id,
+        apiToken: existing.apiToken,
+      }
     }
 
-    // New registration - just establish polling connection
-    return await ctx.db.insert("deviceClients", {
+    // Generate secure API token for new device
+    const apiToken = crypto.randomUUID()
+
+    // New registration - establish polling connection with auth token
+    const deviceClientId = await ctx.db.insert("deviceClients", {
       deviceId: args.deviceId,
+      apiToken,
       lastHeartbeat: Date.now(),
       status: "online",
       pingInterval: 15, // Check in every 15 minutes
       registeredAt: Date.now(),
     })
+
+    return {
+      deviceClientId,
+      apiToken,
+    }
   },
 })
 
@@ -149,5 +161,31 @@ export const updatePingInterval = mutation({
     })
 
     return { success: true }
+  },
+})
+
+/**
+ * Validate API token and return device client info
+ * Used by API routes to authenticate device requests
+ */
+export const validateToken = query({
+  args: {
+    apiToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const device = await ctx.db
+      .query("deviceClients")
+      .withIndex("by_token", (q) => q.eq("apiToken", args.apiToken))
+      .first()
+
+    if (!device) {
+      return null
+    }
+
+    return {
+      deviceId: device.deviceId,
+      pingInterval: device.pingInterval,
+      _id: device._id,
+    }
   },
 })
