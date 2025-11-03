@@ -251,6 +251,7 @@ export function QRCodeGenerator() {
             {/* QR Code Image */}
             <div className="flex flex-col items-center gap-4">
               {tokenData.qrCode ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={tokenData.qrCode}
                   alt="Enrollment QR Code"

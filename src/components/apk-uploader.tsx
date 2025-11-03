@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Upload, CheckCircle2, XCircle, FileType, Loader2 } from 'lucide-react'
-import { parseApkMetadata, validateApkFile, formatFileSize } from '@/lib/apk-signature'
+import { parseApkMetadataClient, validateApkFile, formatFileSize } from '@/lib/apk-signature-client'
 
 interface UploadStatus {
   stage: 'idle' | 'validating' | 'parsing' | 'uploading' | 'saving' | 'success' | 'error'
@@ -49,16 +49,14 @@ export function ApkUploader() {
     try {
       // Stage 1: Validate
       setStatus({ stage: 'validating', progress: 10, message: 'Validating APK file...' })
-      const buffer = await file.arrayBuffer()
-      const apkBuffer = Buffer.from(buffer)
 
-      if (!validateApkFile(apkBuffer)) {
+      if (!(await validateApkFile(file))) {
         throw new Error('Invalid APK file format')
       }
 
-      // Stage 2: Parse metadata
+      // Stage 2: Parse metadata (client-side using JSZip)
       setStatus({ stage: 'parsing', progress: 25, message: 'Extracting APK metadata...' })
-      const metadata = await parseApkMetadata(apkBuffer)
+      const metadata = await parseApkMetadataClient(file)
 
       setApkInfo({
         packageName: metadata.packageName,

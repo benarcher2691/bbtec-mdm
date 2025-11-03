@@ -82,6 +82,7 @@ export function DeviceListTable() {
         setSelectedDevice(device)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, searchParams, devices])
 
   // Debug: Log when selectedDevice changes
