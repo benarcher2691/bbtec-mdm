@@ -66,14 +66,15 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
 
   const applications = useQuery(api.applications.listApplications)
 
-  // Get client app connection status
+  // Get client app connection status using serial number
+  // Serial number is the common identifier between Android Management API and our client app
   const deviceClient = useQuery(api.deviceClients.getByAndroidDeviceId, {
-    androidDeviceId: device.name ? getDeviceId(device.name) : ''
+    androidDeviceId: device.hardwareInfo?.serialNumber || ''
   })
 
   // Get pending installation commands
   const pendingInstalls = useQuery(api.installCommands.getByDevice, {
-    deviceId: device.name ? getDeviceId(device.name) : ''
+    deviceId: device.hardwareInfo?.serialNumber || ''
   })
 
   // Sync ping interval from database when deviceClient loads
@@ -135,13 +136,12 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
   }
 
   const handleUpdateInterval = async () => {
-    if (!device.name) return
+    if (!device.hardwareInfo?.serialNumber) return
 
     setUpdatingInterval(true)
     try {
-      const deviceId = getDeviceId(device.name)
       await updatePingInterval({
-        deviceId,
+        deviceId: device.hardwareInfo.serialNumber,
         pingInterval,
       })
     } catch (error) {
@@ -152,7 +152,7 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
   }
 
   const handleInstallApp = async () => {
-    if (!selectedApp || !device.name) return
+    if (!selectedApp || !device.hardwareInfo?.serialNumber) return
 
     const app = applications?.find(a => a._id === selectedApp)
     if (!app) return
@@ -162,7 +162,7 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
     setInstallSuccess(false)
 
     try {
-      const deviceId = getDeviceId(device.name)
+      const deviceId = device.hardwareInfo.serialNumber
 
       // Generate public URL for the APK
       const baseUrl = window.location.origin

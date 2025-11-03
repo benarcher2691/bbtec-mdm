@@ -16,12 +16,19 @@ class DeviceRegistration(private val context: Context) {
     private val prefsManager = PreferencesManager(context)
 
     fun registerDevice() {
-        val deviceId = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ANDROID_ID
-        )
+        // Use serial number as device ID - this matches Android Management API's hardwareInfo.serialNumber
+        val deviceId = try {
+            Build.getSerial()
+        } catch (e: SecurityException) {
+            // Fallback to ANDROID_ID if serial number is not accessible
+            Log.w(TAG, "Cannot access serial number, falling back to ANDROID_ID", e)
+            Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ANDROID_ID
+            )
+        }
 
-        Log.d(TAG, "Registering device: $deviceId")
+        Log.d(TAG, "Registering device with serial: $deviceId")
 
         // Only send device ID - metadata comes from Android Management API
         val json = gson.toJson(mapOf(
