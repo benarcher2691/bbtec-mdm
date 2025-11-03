@@ -1546,13 +1546,77 @@ Device: Pixel Tablet
 **Priority**: 🔴 **CRITICAL** - Blocks core functionality (connection status visibility)
 
 **Next Steps**:
-1. Test WiFi MAC address availability in Android Management API
+1. ~~Test WiFi MAC address availability in Android Management API~~ → **Research commercial MDM solution first** (see below)
 2. If available, implement MAC address matching
 3. If not available, design per-device enrollment QR code system
+
+### 🔬 Research Plan: Analyze Miradore MDM Client (2025-11-03)
+
+**Objective**: Learn how commercial MDM solutions solve the device identification problem
+
+**Approach**: Enroll test device in Miradore MDM and reverse-engineer their client app to understand:
+
+1. **Device Identification Strategy**
+   - What device identifier do they use to link with Android Management API?
+   - ANDROID_ID, WiFi MAC, IMEI, custom token, or something else?
+   - How do they handle the same Android 10+ privacy restrictions we're facing?
+
+2. **Permissions Analysis**
+   ```bash
+   # Extract permissions from Miradore client
+   adb shell dumpsys package com.miradore.client | grep permission
+
+   # Or inspect AndroidManifest.xml
+   adb shell pm path com.miradore.client
+   adb pull <path> miradore-client.apk
+   apktool d miradore-client.apk
+   cat miradore-client/AndroidManifest.xml
+   ```
+
+3. **Architecture Investigation**
+   - Is Miradore client app the Device Owner or a companion app?
+   - Do they use per-device enrollment tokens?
+   - How does their registration flow work?
+
+4. **APK Decompilation**
+   ```bash
+   # Pull APK from device
+   adb pull $(adb shell pm path com.miradore.client | cut -d: -f2) miradore.apk
+
+   # Decompile to inspect code
+   jadx miradore.apk
+   # Look for: registration, device ID generation, API calls
+   ```
+
+5. **Network Traffic Analysis**
+   ```bash
+   # Monitor registration and heartbeat traffic
+   adb logcat | grep -i miradore
+
+   # Observe what data they send during:
+   # - Initial device registration
+   # - Heartbeat/check-in
+   # - Command polling
+   ```
+
+6. **Key Questions to Answer**
+   - ✅ How do they link Android Management API devices with their client app?
+   - ✅ What identifier is guaranteed to be accessible and match?
+   - ✅ Do they use any special permissions or workarounds?
+   - ✅ Is their approach compatible with Android 10+ privacy restrictions?
+   - ✅ Can we adapt their strategy to our open-source implementation?
+
+**Expected Outcome**:
+- Learn production-proven solution to device identification
+- Validate or invalidate our WiFi MAC address hypothesis
+- Discover any alternative approaches we haven't considered
+- Implement the same battle-tested strategy in bbtec-mdm
+
+**Status**: 🟡 Pending device enrollment in Miradore
 
 ---
 
 **Previous Blocker (Resolved 2025-11-02):**
 - ~~None - ready to proceed with testing and Google Play publishing when ready.~~
 
-**Next immediate action**: Resolve device identification issue before proceeding with further testing or Google Play publishing.
+**Next immediate action**: Enroll device in Miradore, analyze their client app approach, then implement proven solution for device identification.
