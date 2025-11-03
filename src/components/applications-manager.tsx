@@ -87,30 +87,27 @@ export function ApplicationsManager() {
     try {
       // Read file as ArrayBuffer and convert to Uint8Array for serialization
       const arrayBuffer = await file.arrayBuffer()
-      const uint8Array = new Uint8Array(arrayBuffer)
+      // Parse APK metadata (client-side)
+      const { parseApkMetadataClient } = await import('@/lib/apk-signature-client')
 
-      // Parse APK metadata
-      const { parseApkMetadata } = await import('@/app/actions/parse-apk')
-      const result = await parseApkMetadata(Array.from(uint8Array))
+      try {
+        const metadata = await parseApkMetadataClient(file)
 
-      if (result.success && result.metadata) {
         // Auto-fill form with extracted metadata
         setFormData({
-          name: result.metadata.name,
-          packageName: result.metadata.packageName,
-          versionName: result.metadata.versionName,
-          versionCode: result.metadata.versionCode.toString(),
+          name: file.name.replace('.apk', ''),
+          packageName: metadata.packageName,
+          versionName: metadata.versionName,
+          versionCode: metadata.versionCode.toString(),
           description: formData.description, // Keep existing description
         })
-      } else {
+      } catch (parseError) {
         // Fallback to filename if parsing fails
         setFormData({
           ...formData,
           name: file.name.replace('.apk', ''),
         })
-        if (result.error) {
-          setError(`Warning: ${result.error}. Please fill in details manually.`)
-        }
+        setError(`Warning: ${parseError instanceof Error ? parseError.message : 'APK parsing failed'}. Please fill in details manually.`)
       }
     } catch (err) {
       console.error('Error parsing APK:', err)
