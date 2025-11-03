@@ -143,6 +143,15 @@
 
 ## Low Priority
 
+### Code Cleanup
+
+- [ ] **Remove debug console.log statements from device-list-table.tsx**
+  - Added in commit 2084b13 (2025-11-03) for navigation debugging
+  - Logs: `[DeviceList] Effect 1/2`, `selectedDevice changed`, etc.
+  - File: `src/components/device-list-table.tsx` (lines 66, 68, 76, 77, 81, 89, 149, 150, 157)
+  - Keep for now while testing navigation, remove once stable
+  - Also consider keeping behind a DEBUG flag for future troubleshooting
+
 ### Nice to Have
 
 - [ ] Export device list to CSV
