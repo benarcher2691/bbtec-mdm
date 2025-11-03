@@ -1443,6 +1443,116 @@ To prevent unauthorized access to client API endpoints (`/api/client/*`), we imp
 
 ## Current Blockers
 
-None - ready to proceed with testing and Google Play publishing when ready.
+### 🔴 CRITICAL: Device Identification Mismatch (2025-11-03)
 
-**Next immediate action**: Continue testing current sideloaded APK, then proceed to Google Play Console setup.
+**Status**: Active blocker - preventing client app heartbeat from showing in web UI
+
+**The Problem:**
+We cannot reliably link a device registered in Google's Android Management API with the same device running our custom client app, because **there is no common identifier that both systems can access**.
+
+**What we have:**
+
+1. **Google's Android Management API** (server-side) provides:
+   - Device ID: `enterprises/LC03fy18qv/devices/38b98cf6e3c0df75` (Google-assigned)
+   - Serial Number: `3627105H804MF5` (from `hardwareInfo.serialNumber`)
+   - IMEI/MEID (if `networkInfoEnabled: true` in policy)
+   - WiFi MAC Address (if `networkInfoEnabled: true` in policy)
+   - ✅ **This data IS visible in web UI** - we can see the serial number
+
+2. **Our Android Client App** (on-device, non-privileged) can access:
+   - ANDROID_ID: `7ad9c0899a15c28b` (from `Settings.Secure.ANDROID_ID`)
+   - Build.MODEL, MANUFACTURER, BRAND (string metadata)
+   - WiFi MAC Address (with `ACCESS_WIFI_STATE` permission)
+   - ❌ **Cannot access serial number** - `Build.getSerial()` throws `SecurityException`
+
+3. **The Mismatch:**
+   - Client app registers with deviceId: `7ad9c0899a15c28b` (ANDROID_ID)
+   - Web UI looks up device by serial number: `3627105H804MF5`
+   - **NO MATCH** → Connection status shows "Waiting for Client Connection"
+
+**Why We Can't Use Serial Number:**
+
+Even with `READ_PHONE_STATE` permission in AndroidManifest.xml, `Build.getSerial()` fails with:
+```
+SecurityException: getSerial: The uid 10274 does not meet the requirements to access device identifiers.
+```
+
+**Root Cause:**
+- Android 10+ restricts `Build.getSerial()` to apps with Device Owner or Profile Owner status
+- Our custom client app is **NOT the Device Owner** - Google's Android Management DPC is the Device Owner
+- Our app runs as a regular (privileged but not owner) app on the managed device
+- Regular apps cannot access hardware identifiers like serial number due to privacy protections
+
+**Impact:**
+- ✅ Client app successfully registers and sends heartbeats
+- ✅ Data is stored in Convex database (`deviceClients` table)
+- ❌ Web UI cannot find matching device from Android Management API
+- ❌ Connection status always shows yellow/red (offline)
+- ❌ Cannot associate client app data with managed device metadata
+
+**Attempted Solutions:**
+
+| Solution | Status | Result |
+|----------|--------|--------|
+| Use serial number from `Build.getSerial()` | ❌ Failed | SecurityException - permission denied |
+| Add `READ_PHONE_STATE` permission | ❌ Failed | Permission exists but still blocked |
+| Use ANDROID_ID everywhere | ⚠️ Won't work | Android Management API doesn't report ANDROID_ID |
+| Manual mapping by timing/guessing | ❌ Rejected | Not 100% certain, not automated |
+
+**Potential Solutions (Not Yet Tested):**
+
+| Solution | Certainty | Automation | Complexity | Notes |
+|----------|-----------|------------|------------|-------|
+| **WiFi MAC Address** | ✅ 100% | ✅ Yes | Medium | Android Management API: `networkInfo.wifiMacAddress`<br>Client app: `WifiManager.getConnectionInfo().getMacAddress()`<br>Requires `networkInfoEnabled: true` in policy |
+| **IMEI/MEID** | ✅ 100% | ✅ Yes | High | Android Management API: `networkInfo.imei`<br>Client app: Requires `READ_PHONE_STATE` + might fail on tablets<br>Not all devices have IMEI (WiFi-only tablets) |
+| Device fingerprint (model + manufacturer + android version + timestamp window) | ⚠️ 90%+ | ✅ Yes | Low | Match based on metadata within enrollment time window<br>Could fail if enrolling multiple identical devices |
+| Embedding device ID in QR code during enrollment | ✅ 100% | ✅ Yes | High | Generate unique QR code per device with embedded serial number<br>Client app reads from enrollment extras<br>Requires per-device enrollment tokens |
+
+**Recommended Path Forward:**
+
+1. **Short-term (testing)**: WiFi MAC Address matching
+   - Enable `networkInfoEnabled: true` in policy
+   - Update client app to send WiFi MAC in registration
+   - Update web UI to match by `networkInfo.wifiMacAddress`
+   - Test if Android Management API actually reports WiFi MAC for this device
+
+2. **Long-term (production)**: Per-device enrollment QR codes
+   - Generate unique enrollment token for each device
+   - Embed serial number or device ID in enrollment extras
+   - Client app reads from enrollment data during setup
+   - Most reliable solution, requires workflow change
+
+**Testing Data (2025-11-03):**
+
+Device: Pixel Tablet
+- Android Management API Device ID: `38b98cf6e3c0df75`
+- Serial Number (from API): `3627105H804MF5`
+- ANDROID_ID (from client): `7ad9c0899a15c28b`
+- Client app logs show successful registration and heartbeat
+- Convex database shows `deviceClients` record with `deviceId: "7ad9c0899a15c28b"`
+- Web UI cannot link the two → connection status offline
+
+**Files Involved:**
+- Client: `android-client/app/src/main/java/com/bbtec/mdm/client/DeviceRegistration.kt:20`
+- Web UI: `src/components/device-detail-view.tsx:164` (lookup by serial number)
+- API: `src/app/api/client/heartbeat/route.ts` (accepts any deviceId)
+- Schema: `convex/schema.ts` (deviceClients table)
+
+**References:**
+- Android device identifiers: https://developer.android.com/training/articles/user-data-ids
+- Android 10 privacy changes: https://developer.android.com/about/versions/10/privacy/changes
+- Android Management API NetworkInfo: https://developers.google.com/android/management/reference/rest/v1/enterprises.devices#NetworkInfo
+
+**Priority**: 🔴 **CRITICAL** - Blocks core functionality (connection status visibility)
+
+**Next Steps**:
+1. Test WiFi MAC address availability in Android Management API
+2. If available, implement MAC address matching
+3. If not available, design per-device enrollment QR code system
+
+---
+
+**Previous Blocker (Resolved 2025-11-02):**
+- ~~None - ready to proceed with testing and Google Play publishing when ready.~~
+
+**Next immediate action**: Resolve device identification issue before proceeding with further testing or Google Play publishing.
