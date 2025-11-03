@@ -49,6 +49,10 @@ class DeviceRegistration(private val context: Context) {
                         prefsManager.setApiToken(result.apiToken)
                         prefsManager.setRegistered(true)
                         Log.d(TAG, "Registration successful! Token saved.")
+
+                        // Send immediate heartbeat now that we have a token
+                        Log.d(TAG, "Sending immediate heartbeat after registration...")
+                        ApiClient(context).sendHeartbeat()
                     } else {
                         Log.e(TAG, "Registration succeeded but no token in response")
                     }

@@ -36,6 +36,13 @@ class PollingService : Service() {
         startPolling()
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "onStartCommand called - sending immediate heartbeat")
+        // Send immediate heartbeat when app is opened (even if service already running)
+        apiClient.sendHeartbeat()
+        return START_STICKY
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startPolling() {
