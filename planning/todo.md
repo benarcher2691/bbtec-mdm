@@ -82,6 +82,54 @@
 
 ## Medium Priority
 
+### ⚠️ Ping Interval Update Delay
+
+**Current Behavior:**
+- Admin changes ping interval in web UI (e.g., 15 min → 1 min)
+- Change is saved to Convex database immediately ✅
+- Android client only learns about change on **next heartbeat**
+- **Result:** Up to 15 minutes delay before new interval takes effect
+
+**Technical Details:**
+- Client polls server at current interval (e.g., every 15 min)
+- Server returns updated `pingInterval` in heartbeat response
+- Client updates SharedPreferences and reschedules polling
+- See: `ApiClient.kt:44-50` (reads interval), `heartbeat/route.ts:23-26` (returns interval)
+
+**Enhancement Opportunity: In-App Interval Configuration**
+
+**Why this makes sense:**
+- ✅ Convex supports direct client connections (not just HTTP APIs)
+- ✅ Android app could call Convex mutations directly
+- ✅ Instant feedback - no waiting for heartbeat cycle
+- ✅ Better UX for device users
+
+**Implementation Approach:**
+1. Add Convex Android SDK to `android-client/app/build.gradle.kts`
+2. Create settings screen in Android app with interval slider
+3. Call `api.deviceClients.updatePingInterval` mutation directly
+4. Update local SharedPreferences immediately
+5. Reschedule polling service with new interval
+6. Keep web UI control as admin override
+
+**Benefits:**
+- Device users can adjust their own check-in frequency
+- Immediate effect (no delay)
+- Reduces server load if users choose longer intervals
+- Better battery life control for users
+
+**Considerations:**
+- Need auth strategy for Convex client (device API tokens?)
+- Should admin be able to lock interval (prevent user changes)?
+- Min/max bounds enforcement (1-180 minutes)
+
+**Status:** 💡 Idea / Not Started
+**Priority:** Medium
+**Complexity:** Low-Medium (2-3 hours)
+**Dependencies:** None
+
+---
+
 ### Future Enhancements
 
 - [ ] Device-specific policies for granular control
@@ -104,4 +152,4 @@
 
 ---
 
-**Last Updated:** 2025-11-01
+**Last Updated:** 2025-11-03

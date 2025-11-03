@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { usePathname, useSearchParams } from "next/navigation"
+import { usePathname, useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -59,10 +59,13 @@ export function DeviceListTable() {
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const router = useRouter()
 
   // Reset selection and reload when navigating to devices list (without specific device)
   useEffect(() => {
+    console.log('[DeviceList] Effect 1 - pathname:', pathname, 'deviceId:', searchParams.get('deviceId'))
     if (pathname === '/management/devices' && !searchParams.get('deviceId')) {
+      console.log('[DeviceList] Resetting selection and reloading devices')
       setSelectedDevice(null)
       loadDevices()
     }
@@ -71,13 +74,20 @@ export function DeviceListTable() {
   // Auto-select device when URL has deviceId param and devices are loaded
   useEffect(() => {
     const deviceId = searchParams.get('deviceId')
+    console.log('[DeviceList] Effect 2 - deviceId:', deviceId, 'devices.length:', devices.length, 'selectedDevice:', selectedDevice?.name)
     if (pathname === '/management/devices' && deviceId && devices.length > 0) {
       const device = devices.find(d => d.name?.endsWith(deviceId))
       if (device) {
+        console.log('[DeviceList] Auto-selecting device:', deviceId)
         setSelectedDevice(device)
       }
     }
   }, [pathname, searchParams, devices])
+
+  // Debug: Log when selectedDevice changes
+  useEffect(() => {
+    console.log('[DeviceList] selectedDevice changed:', selectedDevice ? getDeviceId(selectedDevice.name!) : 'null')
+  }, [selectedDevice])
 
   const loadDevices = async () => {
     setLoading(true)
@@ -141,11 +151,17 @@ export function DeviceListTable() {
   }
 
   const handleDeviceDoubleClick = (device: Device) => {
-    setSelectedDevice(device)
+    console.log('[DeviceList] Double-clicked device:', device.name)
+    const deviceId = getDeviceId(device.name!)
+    console.log('[DeviceList] Navigating to device:', deviceId)
+    // Update URL with deviceId - this will trigger auto-select via Effect 2
+    router.push(`/management/devices?deviceId=${deviceId}`)
   }
 
   const handleBackToList = () => {
-    setSelectedDevice(null)
+    console.log('[DeviceList] Back to list clicked')
+    // Navigate to devices list without deviceId - this will trigger reset via Effect 1
+    router.push('/management/devices')
   }
 
   const getDeviceId = (deviceName: string) => {
