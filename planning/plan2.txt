@@ -1,0 +1,128 @@
+ Path 2: Custom DPC Implementation Plan                                                      │
+     │                                                                                             │
+     │ Overview                                                                                    │
+     │                                                                                             │
+     │ Transition from Google's Android Management API to a custom Device Policy Controller (like  │
+     │ Miradore), giving bbtec-mdm full control over device management with complete serial number │
+     │ access and advanced features.                                                               │
+     │                                                                                             │
+     │ Key Decisions                                                                               │
+     │                                                                                             │
+     │ - ✅ Complete replacement of Android Management API                                          │
+     │ - ✅ Convex file storage for APK hosting (migrate to GitHub Releases later)                  │
+     │ - ✅ Full feature set: Silent APK installation, Device policies, Lock/Wipe, Kiosk mode,      │
+     │ Online tracking                                                                             │
+     │ - ✅ Preserve web UI structure, remove Android Management API dependencies                   │
+     │                                                                                             │
+     │ Implementation Phases                                                                       │
+     │                                                                                             │
+     │ Phase 1: Backend Setup (Convex + API Routes)                                                │
+     │                                                                                             │
+     │ Duration: 4-6 hours                                                                         │
+     │                                                                                             │
+     │ Tasks:                                                                                      │
+     │ 1. Update Convex schema to remove Android Management API dependencies                       │
+     │ 2. Add APK file storage system (Convex storage)                                             │
+     │ 3. Create policy management tables (stored policies instead of Google API)                  │
+     │ 4. Build new API endpoints for DPC communication                                            │
+     │ 5. Create enrollment token generation (JWT-based, not Google tokens)                        │
+     │                                                                                             │
+     │ Files to modify:                                                                            │
+     │ - convex/schema.ts - New tables for policies, enrollment tokens, APK metadata               │
+     │ - convex/apkStorage.ts - APK upload/download functions                                      │
+     │ - convex/policies.ts - Policy CRUD operations                                               │
+     │ - src/app/api/dpc/* - New DPC communication endpoints                                       │
+     │                                                                                             │
+     │ Phase 2: Android DPC Enhancement                                                            │
+     │                                                                                             │
+     │ Duration: 8-12 hours                                                                        │
+     │                                                                                             │
+     │ Tasks:                                                                                      │
+     │ 1. Enhance MdmDeviceAdminReceiver to handle provisioning                                    │
+     │ 2. Implement DevicePolicyManager APIs (password, camera, WiFi, etc.)                        │
+     │ 3. Add lock/wipe/kiosk mode support                                                         │
+     │ 4. Read provisioning extras from QR code (server URL, enrollment token)                     │
+     │ 5. Enhanced device registration (using serial number via Build.getSerial())                 │
+     │ 6. Policy sync and enforcement engine                                                       │
+     │ 7. Add foreground service for persistent connection                                         │
+     │                                                                                             │
+     │ Files to modify:                                                                            │
+     │ - android-client/app/src/main/java/com/bbtec/mdm/client/MdmDeviceAdminReceiver.kt           │
+     │ - android-client/app/src/main/java/com/bbtec/mdm/client/PolicyManager.kt (NEW)              │
+     │ - android-client/app/src/main/java/com/bbtec/mdm/client/DeviceRegistration.kt               │
+     │ - android-client/app/src/main/AndroidManifest.xml                                           │
+     │ - android-client/app/src/main/res/xml/device_admin.xml                                      │
+     │                                                                                             │
+     │ Phase 3: QR Code Generation                                                                 │
+     │                                                                                             │
+     │ Duration: 3-4 hours                                                                         │
+     │                                                                                             │
+     │ Tasks:                                                                                      │
+     │ 1. Remove Android Management API token generation                                           │
+     │ 2. Create custom QR code generator (JSON provisioning payload)                              │
+     │ 3. Generate APK signature checksum                                                          │
+     │ 4. Upload APK to Convex storage                                                             │
+     │ 5. Create enrollment tokens with expiration                                                 │
+     │                                                                                             │
+     │ Files to modify:                                                                            │
+     │ - src/components/qr-code-generator.tsx                                                      │
+     │ - src/app/actions/enrollment.ts (NEW - replaces android-management.ts)                      │
+     │ - Remove src/app/actions/android-management.ts                                              │
+     │                                                                                             │
+     │ Phase 4: Web UI Updates                                                                     │
+     │                                                                                             │
+     │ Duration: 4-6 hours                                                                         │
+     │                                                                                             │
+     │ Tasks:                                                                                      │
+     │ 1. Remove Android Management API imports throughout                                         │
+     │ 2. Update device listing (Convex queries instead of Google API)                             │
+     │ 3. Build policy editor UI component                                                         │
+     │ 4. Update device detail view (remove Google-specific fields)                                │
+     │ 5. Add APK upload interface                                                                 │
+     │                                                                                             │
+     │ Files to modify:                                                                            │
+     │ - src/components/device-list-table.tsx                                                      │
+     │ - src/components/device-detail-view.tsx                                                     │
+     │ - src/components/policy-editor.tsx (NEW)                                                    │
+     │ - src/components/apk-uploader.tsx (NEW)                                                     │
+     │                                                                                             │
+     │ Phase 5: Testing & Deployment                                                               │
+     │                                                                                             │
+     │ Duration: 2-4 hours                                                                         │
+     │                                                                                             │
+     │ Tasks:                                                                                      │
+     │ 1. Build signed release APK                                                                 │
+     │ 2. Upload to Convex storage via web UI                                                      │
+     │ 3. Generate custom QR code                                                                  │
+     │ 4. Factory reset test device                                                                │
+     │ 5. Test full provisioning flow                                                              │
+     │ 6. Verify all features (lock, wipe, kiosk, policies, APK install)                           │
+     │                                                                                             │
+     │ Total Estimated Time                                                                        │
+     │                                                                                             │
+     │ 21-32 hours (3-4 working days)                                                              │
+     │                                                                                             │
+     │ Major Benefits Post-Migration                                                               │
+     │                                                                                             │
+     │ - ✅ Full serial number access (no WiFi MAC workaround)                                      │
+     │ - ✅ Complete control over device policies                                                   │
+     │ - ✅ No Google API dependencies or quotas                                                    │
+     │ - ✅ Custom features (kiosk mode, advanced policies)                                         │
+     │ - ✅ True learning experience of MDM internals                                               │
+     │ - ✅ More like real commercial MDM solutions (Miradore, VMware, etc.)                        │
+     │                                                                                             │
+     │ Web Dashboard Usage (Per Your Principle)                                                    │
+     │                                                                                             │
+     │ - ✅ Convex Dashboard: Create storage bucket, monitor file uploads                           │
+     │ - ✅ Vercel Dashboard: Environment variables (remove Google creds, add signing keys)         │
+     │ - ✅ Local APK signing: Use Android Studio GUI for keystore creation (not keytool CLI)       │
+     │ - ✅ Convex Web UI: Test file upload before automating                                       │
+     │                                                                                             │
+     │ Next Steps After Approval                                                                   │
+     │                                                                                             │
+     │ 1. Phase 1: Start with Convex schema and backend setup                                      │
+     │ 2. Use Convex Dashboard to create storage system                                            │
+     │ 3. Test APK upload manually via dashboard                                                   │
+     │ 4. Move to Android DPC enhancements                                                         │
+     │ 5. Iterate through remaining phases                                                         │
+     │                                                                                             │

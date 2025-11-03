@@ -2,30 +2,41 @@ import { v } from "convex/values"
 import { mutation, query } from "./_generated/server"
 
 /**
- * Register a new device client
- * Device metadata comes from Android Management API - we only track connection status
+ * Register a new device client (NEW: Device Owner model)
+ * Now we store full device metadata since we ARE the Device Owner
  */
 export const registerDevice = mutation({
   args: {
-    deviceId: v.string(),
+    deviceId: v.string(),         // Serial number (primary)
+    serialNumber: v.string(),
+    androidId: v.string(),
+    model: v.string(),
+    manufacturer: v.string(),
+    androidVersion: v.string(),
+    isDeviceOwner: v.boolean(),
+    userId: v.optional(v.string()), // Optional, can be assigned later
   },
   handler: async (ctx, args) => {
-    // Check if device already registered
+    // Check if device already registered (by serial number)
     const existing = await ctx.db
       .query("deviceClients")
-      .withIndex("by_device", (q) => q.eq("deviceId", args.deviceId))
+      .withIndex("by_serial", (q) => q.eq("serialNumber", args.serialNumber))
       .first()
 
     if (existing) {
-      // Generate token if missing (migration case)
+      // Update existing device registration
       const apiToken = existing.apiToken || crypto.randomUUID()
 
-      // Update heartbeat and ensure token exists
       await ctx.db.patch(existing._id, {
         lastHeartbeat: Date.now(),
         status: "online",
         apiToken,
+        model: args.model,
+        manufacturer: args.manufacturer,
+        androidVersion: args.androidVersion,
+        isDeviceOwner: args.isDeviceOwner,
       })
+
       return {
         deviceClientId: existing._id,
         apiToken,
@@ -35,14 +46,28 @@ export const registerDevice = mutation({
     // Generate secure API token for new device
     const apiToken = crypto.randomUUID()
 
-    // New registration - establish polling connection with auth token
+    // Get user ID from context if not provided (for web-initiated enrollments)
+    let userId = args.userId
+    if (!userId) {
+      const identity = await ctx.auth.getUserIdentity()
+      userId = identity?.subject || "system" // Fallback to "system" for unassigned devices
+    }
+
+    // New registration
     const deviceClientId = await ctx.db.insert("deviceClients", {
-      deviceId: args.deviceId,
-      apiToken,
+      deviceId: args.serialNumber,     // Use serial number as primary ID
+      userId,
+      serialNumber: args.serialNumber,
+      androidId: args.androidId,
+      model: args.model,
+      manufacturer: args.manufacturer,
+      androidVersion: args.androidVersion,
       lastHeartbeat: Date.now(),
       status: "online",
-      pingInterval: 15, // Check in every 15 minutes
+      pingInterval: 15,
       registeredAt: Date.now(),
+      isDeviceOwner: args.isDeviceOwner,
+      apiToken,
     })
 
     return {
@@ -191,5 +216,114 @@ export const validateToken = query({
       pingInterval: device.pingInterval,
       _id: device._id,
     }
+  },
+})
+
+/**
+ * List all devices for current user (NEW)
+ */
+export const listDevices = query({
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) return []
+
+    return await ctx.db
+      .query("deviceClients")
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
+      .order("desc")
+      .collect()
+  },
+})
+
+/**
+ * Get device by ID (NEW)
+ */
+export const getDevice = query({
+  args: { deviceId: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) return null
+
+    const device = await ctx.db
+      .query("deviceClients")
+      .withIndex("by_device", (q) => q.eq("deviceId", args.deviceId))
+      .filter((q) => q.eq(q.field("userId"), identity.subject))
+      .first()
+
+    return device
+  },
+})
+
+/**
+ * Get device by serial number (NEW)
+ */
+export const getBySerialNumber = query({
+  args: { serialNumber: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) return null
+
+    return await ctx.db
+      .query("deviceClients")
+      .withIndex("by_serial", (q) => q.eq("serialNumber", args.serialNumber))
+      .filter((q) => q.eq(q.field("userId"), identity.subject))
+      .first()
+  },
+})
+
+/**
+ * Delete a device (NEW)
+ */
+export const deleteDevice = mutation({
+  args: { deviceId: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error("Unauthenticated")
+
+    const device = await ctx.db
+      .query("deviceClients")
+      .withIndex("by_device", (q) => q.eq("deviceId", args.deviceId))
+      .filter((q) => q.eq(q.field("userId"), identity.subject))
+      .first()
+
+    if (!device) {
+      throw new Error("Device not found or unauthorized")
+    }
+
+    await ctx.db.delete(device._id)
+  },
+})
+
+/**
+ * Update device policy (NEW)
+ */
+export const updateDevicePolicy = mutation({
+  args: {
+    deviceId: v.string(),
+    policyId: v.id("policies"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error("Unauthenticated")
+
+    const device = await ctx.db
+      .query("deviceClients")
+      .withIndex("by_device", (q) => q.eq("deviceId", args.deviceId))
+      .filter((q) => q.eq(q.field("userId"), identity.subject))
+      .first()
+
+    if (!device) {
+      throw new Error("Device not found or unauthorized")
+    }
+
+    // Verify policy exists and belongs to user
+    const policy = await ctx.db.get(args.policyId)
+    if (!policy || policy.userId !== identity.subject) {
+      throw new Error("Policy not found or unauthorized")
+    }
+
+    await ctx.db.patch(device._id, {
+      policyId: args.policyId,
+    })
   },
 })

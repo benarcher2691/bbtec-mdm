@@ -8,11 +8,15 @@
  * @module
  */
 
+import type * as apkStorage from "../apkStorage.js";
 import type * as applications from "../applications.js";
 import type * as audit from "../audit.js";
 import type * as deviceClients from "../deviceClients.js";
+import type * as deviceCommands from "../deviceCommands.js";
 import type * as devices from "../devices.js";
+import type * as enrollmentTokens from "../enrollmentTokens.js";
 import type * as installCommands from "../installCommands.js";
+import type * as policies from "../policies.js";
 import type * as preferences from "../preferences.js";
 
 import type {
@@ -30,11 +34,15 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  apkStorage: typeof apkStorage;
   applications: typeof applications;
   audit: typeof audit;
   deviceClients: typeof deviceClients;
+  deviceCommands: typeof deviceCommands;
   devices: typeof devices;
+  enrollmentTokens: typeof enrollmentTokens;
   installCommands: typeof installCommands;
+  policies: typeof policies;
   preferences: typeof preferences;
 }>;
 declare const fullApiWithMounts: typeof fullApi;
