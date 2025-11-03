@@ -60,23 +60,22 @@ export function DeviceListTable() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  // Reset selected device and reload list when navigating to /management/devices
+  // Reset selection and reload when navigating to devices list (without specific device)
   useEffect(() => {
-    if (pathname === '/management/devices') {
-      const deviceId = searchParams.get('deviceId')
-
-      // If deviceId query param exists, auto-select that device
-      if (deviceId && devices.length > 0) {
-        const device = devices.find(d => d.name?.endsWith(deviceId))
-        if (device) {
-          setSelectedDevice(device)
-          return // Don't reload if we're selecting a device
-        }
-      }
-
-      // Otherwise reset selection and reload
+    if (pathname === '/management/devices' && !searchParams.get('deviceId')) {
       setSelectedDevice(null)
       loadDevices()
+    }
+  }, [pathname, searchParams])
+
+  // Auto-select device when URL has deviceId param and devices are loaded
+  useEffect(() => {
+    const deviceId = searchParams.get('deviceId')
+    if (pathname === '/management/devices' && deviceId && devices.length > 0) {
+      const device = devices.find(d => d.name?.endsWith(deviceId))
+      if (device) {
+        setSelectedDevice(device)
+      }
     }
   }, [pathname, searchParams, devices])
 
