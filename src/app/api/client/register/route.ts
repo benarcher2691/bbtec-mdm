@@ -7,11 +7,20 @@ const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { deviceId } = body
+    const {
+      deviceId,
+      serialNumber,
+      androidId,
+      model,
+      manufacturer,
+      androidVersion,
+      isDeviceOwner,
+    } = body
 
-    if (!deviceId) {
+    // Validate required fields
+    if (!deviceId || !serialNumber || !androidId || !model || !manufacturer || !androidVersion) {
       return NextResponse.json(
-        { error: 'deviceId is required' },
+        { error: 'Missing required device information' },
         { status: 400 }
       )
     }
@@ -19,6 +28,12 @@ export async function POST(request: NextRequest) {
     // Register device and get API token
     const result = await convex.mutation(api.deviceClients.registerDevice, {
       deviceId,
+      serialNumber,
+      androidId,
+      model,
+      manufacturer,
+      androidVersion,
+      isDeviceOwner: isDeviceOwner ?? false,
     })
 
     // Return token to device for future authentication

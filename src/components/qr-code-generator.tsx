@@ -1,16 +1,28 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { useQuery } from "convex/react"
+import { api } from "../../convex/_generated/api"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { createEnrollmentToken, listDevices } from "@/app/actions/android-management"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { createEnrollmentQRCode, listDevices } from "@/app/actions/enrollment"
 import { QrCode, Copy, Check, AlertCircle, ArrowRight, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import type { Id } from "../../convex/_generated/dataModel"
 
 interface EnrollmentToken {
   token: string
   qrCode: string
   expirationTimestamp: string
+  apkVersion?: string
 }
 
 export function QRCodeGenerator() {
@@ -22,9 +34,26 @@ export function QRCodeGenerator() {
   const [enrolledDevice, setEnrolledDevice] = useState<any | null>(null)
   const [waitingForEnrollment, setWaitingForEnrollment] = useState(false)
   const [deviceCountBefore, setDeviceCountBefore] = useState(0)
+  const [selectedPolicyId, setSelectedPolicyId] = useState<Id<"policies"> | null>(null)
   const pollingInterval = useRef<NodeJS.Timeout | null>(null)
 
+  // Query policies from Convex
+  const policies = useQuery(api.policies.listPolicies)
+  const defaultPolicy = useQuery(api.policies.getDefaultPolicy)
+
+  // Set default policy when it loads
+  useEffect(() => {
+    if (defaultPolicy && !selectedPolicyId) {
+      setSelectedPolicyId(defaultPolicy._id)
+    }
+  }, [defaultPolicy, selectedPolicyId])
+
   const handleGenerateToken = async () => {
+    if (!selectedPolicyId) {
+      setError('Please select a policy first')
+      return
+    }
+
     setLoading(true)
     setError(null)
     setEnrolledDevice(null)
@@ -36,20 +65,21 @@ export function QRCodeGenerator() {
         setDeviceCountBefore(devicesResult.devices.length)
       }
 
-      const result = await createEnrollmentToken('default-policy', 3600)
+      const result = await createEnrollmentQRCode(selectedPolicyId, 3600)
 
       if (result.success) {
         setTokenData({
           token: result.token || '',
           qrCode: result.qrCode || '',
           expirationTimestamp: result.expirationTimestamp || '',
+          apkVersion: result.apkVersion,
         })
 
         // Start polling for new device enrollment
         setWaitingForEnrollment(true)
         startPollingForEnrollment()
       } else {
-        setError(result.error || 'Failed to create enrollment token')
+        setError(result.error || 'Failed to create enrollment QR code')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -88,9 +118,8 @@ export function QRCodeGenerator() {
 
   const handleGoToDevice = () => {
     // Navigate to device detail page
-    if (enrolledDevice?.name) {
-      const deviceId = enrolledDevice.name.split('/').pop()
-      router.push(`/management/devices?deviceId=${deviceId}`)
+    if (enrolledDevice?.deviceId) {
+      router.push(`/management/devices?deviceId=${enrolledDevice.deviceId}`)
     } else {
       router.push('/management/devices')
     }
@@ -121,16 +150,37 @@ export function QRCodeGenerator() {
 
   return (
     <div className="space-y-6">
+      {/* Policy Selection */}
+      <div className="space-y-2">
+        <Label htmlFor="policy-select">Policy</Label>
+        <Select
+          value={selectedPolicyId || undefined}
+          onValueChange={(value) => setSelectedPolicyId(value as Id<"policies">)}
+        >
+          <SelectTrigger id="policy-select" className="w-full md:w-[300px]">
+            <SelectValue placeholder="Select a policy" />
+          </SelectTrigger>
+          <SelectContent>
+            {policies?.map((policy) => (
+              <SelectItem key={policy._id} value={policy._id}>
+                {policy.name}
+                {policy.isDefault && " (Default)"}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Generate Button */}
       <div className="flex gap-4 items-center">
         <Button
           onClick={handleGenerateToken}
-          disabled={loading}
+          disabled={loading || !selectedPolicyId}
           size="lg"
         >
           {loading ? (
             <>
-              <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent" />
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Generating...
             </>
           ) : (
@@ -163,7 +213,10 @@ export function QRCodeGenerator() {
             <div className="flex-1">
               <h3 className="font-semibold text-green-900 text-lg">Device Enrolled Successfully!</h3>
               <p className="text-sm text-green-700 mt-1">
-                {enrolledDevice.hardwareInfo?.model || 'A device'} has been enrolled and is now being managed.
+                {enrolledDevice.model || 'A device'} has been enrolled and is now being managed.
+              </p>
+              <p className="text-xs text-green-600 mt-1 font-mono">
+                Serial: {enrolledDevice.serialNumber}
               </p>
             </div>
           </div>
@@ -249,6 +302,20 @@ export function QRCodeGenerator() {
                   {formatExpirationTime(tokenData.expirationTimestamp)}
                 </p>
               </div>
+
+              {tokenData.apkVersion && (
+                <>
+                  <Separator />
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">
+                      DPC Version
+                    </label>
+                    <p className="mt-2 text-sm font-mono">
+                      {tokenData.apkVersion}
+                    </p>
+                  </div>
+                </>
+              )}
 
               <Separator />
 

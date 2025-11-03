@@ -25,9 +25,9 @@ export async function POST(request: NextRequest) {
       token: enrollmentToken,
     })
 
-    if (!validation.valid) {
+    if (!validation.valid || !validation.policyId) {
       return NextResponse.json(
-        { error: validation.reason },
+        { error: validation.reason || 'Invalid token' },
         { status: 401 }
       )
     }
