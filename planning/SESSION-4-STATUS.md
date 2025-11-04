@@ -488,12 +488,32 @@ None currently blocking
 6. ~~Fix component name format~~ - Full qualified name for Android 13
 
 ### 🔄 In Progress
-1. **Test Android 13 with component name fix** - User needs to:
-   - Re-upload `bbtec-mdm-client-0.0.7.apk` to web portal
-   - Generate fresh QR code (will contain full component name)
+1. **Test Android 13 with v0.0.8** - STILL FAILING: "Can't use the admin app. it is missing components or corrupted"
+   - Uploaded `bbtec-mdm-client-0.0.8.apk` (with 5 intent-filter actions)
+   - Generated fresh QR code
    - Factory reset Android 13 Hannspree
-   - Scan QR code and provision
-   - Verify Device Owner status: `adb shell dumpsys device_policy`
+   - Same error persists
+
+### 🔍 Debugging Strategy - TestDPC Baseline Test
+
+**CRITICAL: Stop guessing, use definitive test**
+
+**The Approach:**
+1. Download TestDPC v9.0.12 (Google's official pre-built APK)
+   - URL: https://github.com/googlesamples/android-testdpc/releases/download/v9.0.12/testdpc-release.apk
+2. Upload TestDPC to web portal
+3. Calculate TestDPC's signature checksum
+4. Generate QR code with TestDPC's component name (`com.afwsamples.testdpc/.DeviceAdminReceiver`)
+5. Try provisioning on the same Android 13 Hannspree
+
+**This definitively tells us:**
+- ✅ **TestDPC works** → Problem is in our APK (missing component, wrong manifest config)
+- ✅ **TestDPC fails too** → Problem is QR code format or device incompatibility
+
+**Alternative Debugging (no ADB available during factory reset):**
+- Decode generated QR code (screenshot or browser console `[QR GEN]` logs)
+- Verify exact JSON content matches expected format
+- Compare component name, signature, APK URL with what's actually uploaded
 
 ### 📋 Next Session TODO
 
