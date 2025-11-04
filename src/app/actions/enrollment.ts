@@ -49,10 +49,13 @@ export async function createEnrollmentQRCode(
       storageId: currentApk.storageId,
     })
 
-    if (!apkUrl) {
+    console.log('[QR GEN] APK URL from Convex:', apkUrl)
+    console.log('[QR GEN] Storage ID:', currentApk.storageId)
+
+    if (!apkUrl || apkUrl.trim() === '') {
       return {
         success: false,
-        error: 'Failed to generate APK download URL',
+        error: `Failed to generate APK download URL. StorageId: ${currentApk.storageId}`,
       }
     }
 
@@ -72,6 +75,11 @@ export async function createEnrollmentQRCode(
     }
 
     // Build Android provisioning JSON (custom DPC format)
+    const serverUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bbtec-mdm.vercel.app"
+
+    console.log('[QR GEN] Server URL:', serverUrl)
+    console.log('[QR GEN] Enrollment token:', token.token.substring(0, 8) + '...')
+
     const provisioningData = {
       "android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME": "com.bbtec.mdm.client/.MdmDeviceAdminReceiver",
       "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_NAME": "com.bbtec.mdm.client",
@@ -79,7 +87,7 @@ export async function createEnrollmentQRCode(
       "android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM": currentApk.signatureChecksum,
       "android.app.extra.PROVISIONING_SKIP_ENCRYPTION": false,
       "android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE": {
-        "server_url": process.env.NEXT_PUBLIC_APP_URL || "https://bbtec-mdm.vercel.app",
+        "server_url": serverUrl,
         "enrollment_token": token.token,
       }
     }
