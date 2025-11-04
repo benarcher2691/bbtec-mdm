@@ -32,9 +32,24 @@ class DeviceRegistration(private val context: Context) {
 
         Log.d(TAG, "Registering device with serial: $deviceId")
 
-        // Only send device ID - metadata comes from Android Management API
+        val androidId = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ANDROID_ID
+        )
+
+        // Check Device Owner status
+        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val isDeviceOwner = dpm.isDeviceOwnerApp(context.packageName)
+
+        // Send full device information
         val json = gson.toJson(mapOf(
-            "deviceId" to deviceId
+            "deviceId" to deviceId,
+            "serialNumber" to deviceId,
+            "androidId" to androidId,
+            "model" to Build.MODEL,
+            "manufacturer" to Build.MANUFACTURER,
+            "androidVersion" to Build.VERSION.RELEASE,
+            "isDeviceOwner" to isDeviceOwner
         ))
 
         val request = Request.Builder()

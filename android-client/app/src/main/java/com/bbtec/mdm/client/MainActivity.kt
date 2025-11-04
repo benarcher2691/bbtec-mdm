@@ -21,9 +21,18 @@ class MainActivity : AppCompatActivity() {
         // Register device on first launch
         val isRegistered = prefsManager.isRegistered()
         Log.d(TAG, "Is registered: $isRegistered")
+
         if (!isRegistered) {
-            Log.d(TAG, "Starting device registration...")
-            DeviceRegistration(this).registerDevice()
+            // Check if we have enrollment token from QR provisioning
+            val enrollmentToken = prefsManager.getEnrollmentToken()
+
+            if (enrollmentToken != null) {
+                Log.d(TAG, "Found enrollment token, using DPC registration...")
+                DeviceRegistration(this).registerDeviceWithToken(enrollmentToken)
+            } else {
+                Log.d(TAG, "No enrollment token, using fallback registration...")
+                DeviceRegistration(this).registerDevice()
+            }
         }
 
         // Start polling service
