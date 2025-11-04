@@ -6,7 +6,15 @@ import { ConvexHttpClient } from 'convex/browser'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
+async function getAuthenticatedConvexClient() {
+  const { getToken } = await auth()
+  const token = await getToken({ template: 'convex' })
+
+  const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
+  convex.setAuth(token || '')
+
+  return convex
+}
 
 /**
  * Create custom enrollment QR code (NEW: Custom DPC)
@@ -23,6 +31,8 @@ export async function createEnrollmentQRCode(
   }
 
   try {
+    const convex = await getAuthenticatedConvexClient()
+
     // Get current APK metadata
     const currentApk = await convex.query(api.apkStorage.getCurrentApk)
 
@@ -111,6 +121,7 @@ export async function listDevices() {
   }
 
   try {
+    const convex = await getAuthenticatedConvexClient()
     const devices = await convex.query(api.deviceClients.listDevices)
 
     return {
@@ -138,6 +149,7 @@ export async function getDevice(deviceId: string) {
   }
 
   try {
+    const convex = await getAuthenticatedConvexClient()
     const device = await convex.query(api.deviceClients.getDevice, { deviceId })
 
     return {
@@ -168,6 +180,7 @@ export async function issueDeviceCommand(
   }
 
   try {
+    const convex = await getAuthenticatedConvexClient()
     await convex.mutation(api.deviceCommands.createCommand, {
       deviceId,
       commandType,
@@ -198,6 +211,7 @@ export async function deleteDevice(deviceId: string) {
   }
 
   try {
+    const convex = await getAuthenticatedConvexClient()
     await convex.mutation(api.deviceClients.deleteDevice, { deviceId })
 
     return {
@@ -227,6 +241,8 @@ export async function installAppOnDevice(
   }
 
   try {
+    const convex = await getAuthenticatedConvexClient()
+
     // Extract app name from package name
     const appName = packageName.split('.').pop() || packageName
 
