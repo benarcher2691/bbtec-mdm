@@ -20,4 +20,10 @@ class PreferencesManager(context: Context) {
 
     fun getApiToken(): String = prefs.getString("api_token", "") ?: ""
     fun setApiToken(token: String) = prefs.edit().putString("api_token", token).apply()
+
+    fun getServerUrl(): String = prefs.getString("server_url", "https://bbtec-mdm.vercel.app") ?: "https://bbtec-mdm.vercel.app"
+    fun setServerUrl(url: String) = prefs.edit().putString("server_url", url).apply()
+
+    fun getEnrollmentToken(): String = prefs.getString("enrollment_token", "") ?: ""
+    fun setEnrollmentToken(token: String) = prefs.edit().putString("enrollment_token", token).apply()
 }

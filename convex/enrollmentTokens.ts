@@ -59,6 +59,20 @@ export const getToken = query({
 })
 
 /**
+ * Get enrollment token by token string (public - no auth required)
+ * Used by DPC registration endpoint
+ */
+export const getByToken = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("enrollmentTokens")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first()
+  },
+})
+
+/**
  * Validate and get enrollment token details (public - no auth required)
  * Called by DPC during provisioning
  */

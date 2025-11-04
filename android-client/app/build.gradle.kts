@@ -15,10 +15,20 @@ android {
         versionName = "0.0.3"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("../bbtec-mdm.keystore")
+            storePassword = "android"
+            keyAlias = "bbtec-mdm"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
