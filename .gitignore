@@ -60,3 +60,4 @@ android-client/.externalNativeBuild/
 android-client/.cxx/
 android-client/release-key.jks
 android-client/*.keystore
+*.apk
