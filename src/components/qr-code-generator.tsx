@@ -67,6 +67,9 @@ export function QRCodeGenerator() {
 
       const result = await createEnrollmentQRCode(selectedPolicyId, 3600)
 
+      console.log('[QR GEN CLIENT] Full result:', result)
+      console.log('[QR GEN CLIENT] Debug object:', result.debug)
+
       if (result.success) {
         setTokenData({
           token: result.token || '',
