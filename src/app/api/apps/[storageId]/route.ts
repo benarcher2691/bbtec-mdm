@@ -7,7 +7,8 @@ const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
 
 /**
  * API route to serve APK files from Convex storage
- * Used by Android Management API to download apps
+ * Used by Android provisioning to download DPC APK
+ * Also used by Android Management API to download apps
  */
 export async function GET(
   request: NextRequest,
@@ -17,10 +18,17 @@ export async function GET(
     const { storageId: storageIdParam } = await params
     const storageId = storageIdParam as Id<"_storage">
 
-    // Get the download URL from Convex
-    const downloadUrl = await convex.query(api.applications.getDownloadUrl, {
+    // Try DPC APK first (apkStorage), then fall back to applications
+    let downloadUrl = await convex.query(api.apkStorage.getApkDownloadUrl, {
       storageId,
     })
+
+    // If not found in apkStorage, try applications table
+    if (!downloadUrl) {
+      downloadUrl = await convex.query(api.applications.getDownloadUrl, {
+        storageId,
+      })
+    }
 
     if (!downloadUrl) {
       return NextResponse.json(
