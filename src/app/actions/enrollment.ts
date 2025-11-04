@@ -43,10 +43,10 @@ export async function createEnrollmentQRCode(
       }
     }
 
-    // Use short redirect URL instead of long Convex storage URL
+    // Use /api/apps/{storageId} route (shorter than Convex storage URL)
     // This keeps the QR code data small enough for Android scanners
     const serverUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://bbtec-mdm.vercel.app'
-    const apkUrl = `${serverUrl}/api/apk/download`
+    const apkUrl = `${serverUrl}/api/apps/${currentApk.storageId}`
 
     // Create enrollment token
     const tokenId = await convex.mutation(api.enrollmentTokens.createEnrollmentToken, {
