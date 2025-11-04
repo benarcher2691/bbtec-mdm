@@ -5,6 +5,10 @@ const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/api/client/(.*)',
+  '/api/dpc/(.*)',        // DPC registration and policy sync (uses enrollment token / API token)
+  '/api/apps/(.*)',       // APK downloads during provisioning (no auth possible)
+  '/api/apk/(.*)',        // APK download redirects (no auth during provisioning)
+  '/api/debug/(.*)',      // Debug endpoints
 ])
 
 export default clerkMiddleware(async (auth, request) => {
