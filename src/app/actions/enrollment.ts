@@ -84,6 +84,17 @@ export async function createEnrollmentQRCode(
 
     // Generate QR code from JSON
     const qrContent = JSON.stringify(provisioningData)
+
+    // Debug logging
+    console.log('QR Code provisioning data:', {
+      apkUrlLength: apkUrl?.length,
+      totalJsonLength: qrContent.length,
+      signatureChecksum: currentApk.signatureChecksum,
+    })
+
+    if (qrContent.length > 4000) {
+      console.warn(`QR code data is ${qrContent.length} bytes - may be too large for Android scanner (recommended < 4000 bytes)`)
+    }
     const qrCodeDataUrl = await QRCode.toDataURL(qrContent, {
       width: 400,
       margin: 2,
