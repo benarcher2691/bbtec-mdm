@@ -121,6 +121,12 @@ export async function createEnrollmentQRCode(
       qrCode: qrCodeDataUrl,
       expirationTimestamp: new Date(token.expiresAt).toISOString(),
       apkVersion: currentApk.version,
+      debug: {
+        apkUrl,
+        serverUrl,
+        storageId: currentApk.storageId,
+        convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
+      },
     }
   } catch (error) {
     console.error('Error creating enrollment QR code:', error)
