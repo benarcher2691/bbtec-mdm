@@ -38,7 +38,8 @@ export async function parseApkMetadataClient(file: File): Promise<ApkMetadata> {
     // TEMPORARY FIX: Client-side signature extraction is complex (PKCS#7 parsing)
     // Since we only have one keystore, hardcode the correct signature
     // TODO: Implement proper PKCS#7/X.509 certificate extraction
-    const signatureChecksum = 'U80OGp4/OjjGZoQqmJTKjrHt3Nz0+w4TELMDj6cbziE='
+    // NOTE: Must use URL-safe base64 without padding for Android provisioning
+    const signatureChecksum = 'U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE'
 
     // For now, return placeholder values for manifest parsing
     // TODO: Implement binary XML parser or extract from APK filename
@@ -55,7 +56,8 @@ export async function parseApkMetadataClient(file: File): Promise<ApkMetadata> {
 }
 
 /**
- * Calculate SHA-256 checksum of certificate (base64)
+ * Calculate SHA-256 checksum of certificate (URL-safe base64 without padding)
+ * Required format for Android provisioning: RFC 4648 base64url without padding
  */
 async function calculateSignatureChecksum(certData: Uint8Array): Promise<string> {
   // Convert to proper ArrayBuffer for crypto.subtle
@@ -63,7 +65,8 @@ async function calculateSignatureChecksum(certData: Uint8Array): Promise<string>
   const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
   const hashArray = Array.from(new Uint8Array(hashBuffer))
   const hashBase64 = btoa(String.fromCharCode(...hashArray))
-  return hashBase64
+  // Convert to URL-safe base64 without padding (RFC 4648 base64url)
+  return hashBase64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
 /**
