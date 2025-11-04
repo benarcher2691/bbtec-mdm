@@ -43,10 +43,18 @@ export async function createEnrollmentQRCode(
       }
     }
 
-    // Use /api/apps/{storageId} route (shorter than Convex storage URL)
-    // This keeps the QR code data small enough for Android scanners
-    const serverUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://bbtec-mdm.vercel.app'
-    const apkUrl = `${serverUrl}/api/apps/${currentApk.storageId}`
+    // Get direct Convex storage URL (no redirect)
+    // Android 16 provisioning may not follow HTTP redirects
+    const apkUrl = await convex.query(api.apkStorage.getApkDownloadUrl, {
+      storageId: currentApk.storageId,
+    })
+
+    if (!apkUrl) {
+      return {
+        success: false,
+        error: 'Failed to generate APK download URL',
+      }
+    }
 
     // Create enrollment token
     const tokenId = await convex.mutation(api.enrollmentTokens.createEnrollmentToken, {
