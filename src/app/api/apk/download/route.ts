@@ -59,4 +59,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-# Force Vercel rebuild - Tue Nov  4 09:17:55 AM CET 2025
