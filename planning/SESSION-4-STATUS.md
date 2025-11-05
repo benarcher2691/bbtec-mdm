@@ -515,6 +515,59 @@ None currently blocking
 - Verify exact JSON content matches expected format
 - Compare component name, signature, APK URL with what's actually uploaded
 
+### 🔧 Known Issues to Revisit
+
+#### Empty URLs in QR Code Generation (2025-11-05)
+
+**Problem:** Both `PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION` and `server_url` return empty strings when generating QR codes via API routes.
+
+**Current Workaround:** Manual generation - user hits `/api/debug/qr-json` endpoint and manually fills in missing data in external QR generator.
+
+**Root Cause Hypothesis:**
+- Authenticated Convex client (`ConvexHttpClient` with Clerk auth token) fails silently in API routes
+- `ctx.storage.getUrl()` returns `null` instead of Convex storage URL
+- `process.env.NEXT_PUBLIC_APP_URL` is explicitly set to empty string (not undefined) in Vercel, so fallback doesn't work
+
+**Data That Should Be Present:**
+- `PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION`: Should be Convex storage URL (e.g., `https://expert-lemur-691.convex.cloud/api/storage/...`)
+- `server_url`: Should be `https://bbtec-mdm.vercel.app`
+
+**Needs Investigation:**
+1. Why does authenticated Convex client work in Server Actions but not API routes?
+2. Is there an APK actually uploaded in Convex `apkMetadata` table with `isCurrent: true`?
+3. Why is `NEXT_PUBLIC_APP_URL` set to empty string instead of the actual URL?
+
+**TODO:**
+- [ ] Add validation before QR code generation - fail fast if URLs are empty
+- [ ] Test unauthenticated Convex client for public queries in API routes
+- [ ] Verify environment variables in Vercel dashboard
+- [ ] Add user-friendly error message when QR generation fails due to missing data
+- [ ] Consider moving QR generation logic to Server Action instead of API route
+
+**Files Involved:**
+- `src/app/api/debug/qr-json/route.ts` - Debug endpoint (has issue)
+- `src/app/actions/enrollment.ts` - Main QR generation (likely has same issue)
+- `convex/apkStorage.ts` - Storage queries
+
+#### Download Count Not Implemented (2025-11-05)
+
+**Issue:** The `downloadCount` field in `apkMetadata` table always remains 0, even after successful APK downloads during provisioning.
+
+**Root Cause:** The `/api/apps/[storageId]` endpoint only redirects to Convex storage (line 64) but never calls `api.apkStorage.incrementDownloadCount`.
+
+**Impact:** Low - downloadCount is useful for debugging but not critical for functionality.
+
+**Note:** Don't rely on `downloadCount` to verify provisioning success. Instead, check:
+- Device appears in web portal after provisioning
+- Device shows managed status (adb shell dumpsys device_policy)
+- APK is installed on device (adb shell pm list packages)
+
+**Files Involved:**
+- `src/app/api/apps/[storageId]/route.ts` - Missing increment call
+- `convex/apkStorage.ts` - Has `incrementDownloadCount` mutation but unused
+
+---
+
 ### 📋 Next Session TODO
 
 1. **If Android 13 provisioning succeeds:**
@@ -545,6 +598,149 @@ None currently blocking
    - Add version management system
    - Create device provisioning guide for end users
    - Test policy enforcement features
+
+---
+
+## 🔍 Registration Failure Analysis (2025-11-05)
+
+### TestDPC Baseline Test - SUCCESS ✅
+
+**Goal:** Determine if issue is in custom APK or QR provisioning process
+
+**Method:**
+1. Downloaded Google's TestDPC v9.0.12 from APKMirror
+2. Extracted signature checksum: `gJD2YwtOiWJHkSMkkIfLRlj-quNqG1fb6v100QmzM9w`
+3. Uploaded to Convex storage
+4. Generated QR code with proper redirect URL
+5. Tested on Android 10 device
+
+**Result:** ✅ TestDPC provisioned successfully as Device Owner (User 0)
+
+**Key Evidence:**
+```
+dumpsys device_policy:
+Device Owner (User 0): com.afwsamples.testdpc
+Profile Owner (User 10): null
+```
+
+**Conclusion:** QR code format, download mechanism, and provisioning flow all work correctly.
+
+---
+
+### Custom APK Test - Registration Failed ❌
+
+**QR Code Used:** `bbtec-mdm-qr-FINAL.json`
+**APK Version:** v0.0.8 (storageId: kg2c0n5m61jc01hx00crgs3pmd7tr64z)
+
+**Provisioning Result:** ✅ APK downloaded and installed successfully
+**Provisioning Mode:** Profile Owner (User 10) instead of Device Owner (User 0)
+
+**Registration Failure:**
+```
+11-05 12:30:13.657 D/DeviceRegistration: DPC registration response: 400
+11-05 12:30:13.658 E/DeviceRegistration: DPC registration failed: {"error":"Missing required device information or enrollment token"}
+```
+
+---
+
+### Root Cause Identified
+
+**Issue:** The QR code (`bbtec-mdm-qr-FINAL.json`) was **missing the `PROVISIONING_ADMIN_EXTRAS_BUNDLE` field**.
+
+**What was in the QR:**
+```json
+{
+  "android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME": "...",
+  "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_NAME": "...",
+  "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION": "...",
+  "android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM": "...",
+  "android.app.extra.PROVISIONING_SKIP_ENCRYPTION": false
+}
+```
+
+**What was missing:**
+```json
+{
+  ...
+  "android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE": {
+    "server_url": "https://bbtec-mdm.vercel.app",
+    "enrollment_token": "tok_..."
+  }
+}
+```
+
+**Impact:**
+1. Android never passed admin extras to `MdmDeviceAdminReceiver.onProfileProvisioningComplete()`
+2. App had no enrollment token to use for registration
+3. Registration request was rejected by server with HTTP 400
+
+**Code Reference:**
+- `MdmDeviceAdminReceiver.kt:29-36` expects to extract `server_url` and `enrollment_token` from intent extras
+- Without these, preferences are never set (line 41-42)
+- MainActivity tries to register but has no valid token (MainActivity.kt:27-31)
+
+**Evidence from logs:**
+```
+# No MdmDeviceAdminReceiver callbacks found in logs
+# Means onProfileProvisioningComplete() was never called
+
+11-05 12:30:12.846 D/MainActivity: Found enrollment token, using DPC registration...
+# This token was likely from a previous test or cache
+```
+
+---
+
+### Secondary Issue: Profile Owner vs Device Owner
+
+**Problem:** App provisioned as Profile Owner (User 10) instead of Device Owner (User 0)
+
+**Evidence:**
+```
+W/DeviceRegistration: SecurityException: getSerial: The user 10140 does not meet the requirements to access device identifiers.
+```
+
+**Why this happened:**
+Android 10 doesn't support `ProvisioningModeActivity` (GET_PROVISIONING_MODE action). It defaults to Work Profile mode when provisioning.
+
+**Impact:**
+- Limited permissions (e.g., cannot access device serial number)
+- SecurityException when calling `Build.getSerial()`
+- Code correctly falls back to `Settings.Secure.ANDROID_ID`
+
+**Workaround:**
+- Accept Profile Owner mode on Android 10
+- OR test on Android 12+ which supports explicit Device Owner mode selection
+
+---
+
+### Solution
+
+**Use web portal to generate QR codes** - The enrollment action (`src/app/actions/enrollment.ts:89-92`) correctly includes `PROVISIONING_ADMIN_EXTRAS_BUNDLE` with both `server_url` and `enrollment_token`.
+
+**Steps:**
+1. Navigate to MDM web portal
+2. Select policy
+3. Click "Generate QR Code"
+4. Use generated QR (don't manually create JSON)
+
+**Why web portal works:**
+```typescript
+// enrollment.ts:89-92
+"android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE": {
+  "server_url": serverUrl,
+  "enrollment_token": token.token,
+}
+```
+
+This field is automatically included when using the portal.
+
+---
+
+### Detailed Analysis
+
+Complete technical analysis with code references, log evidence, and verification steps documented in:
+
+**`planning/REGISTRATION-FAILURE-ROOT-CAUSE.md`**
 
 ---
 
