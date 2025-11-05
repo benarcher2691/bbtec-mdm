@@ -61,3 +61,5 @@ android-client/.cxx/
 android-client/release-key.jks
 android-client/*.keystore
 *.apk
+# Exception: Allow APKs in artifacts directory
+!artifacts/**/*.apk
