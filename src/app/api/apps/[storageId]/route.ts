@@ -58,6 +58,12 @@ export async function GET(
       )
     }
 
+    // Increment download count (fire and forget - don't block redirect)
+    console.log(`[APK DOWNLOAD] ${storageId} - Incrementing download count...`)
+    convex.mutation(api.apkStorage.incrementDownloadCount, { storageId }).catch((err) => {
+      console.error(`[APK DOWNLOAD] ${storageId} - Failed to increment download count:`, err)
+    })
+
     console.log(`[APK DOWNLOAD] ${storageId} - SUCCESS: Redirecting to Convex storage`)
 
     // Redirect to the Convex storage URL
