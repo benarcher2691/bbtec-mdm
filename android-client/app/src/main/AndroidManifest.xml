@@ -71,6 +71,16 @@
             </intent-filter>
         </activity>
 
+        <!-- Provisioning success handler (signals Device Owner capability to Android) -->
+        <activity
+            android:name=".ProvisioningSuccessActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.app.action.PROVISIONING_SUCCESSFUL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".PollingService"
             android:enabled="true"
