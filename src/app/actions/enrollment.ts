@@ -43,21 +43,13 @@ export async function createEnrollmentQRCode(
       }
     }
 
-    // Get direct Convex storage URL (no redirect)
-    // Android 16 provisioning may not follow HTTP redirects
-    const apkUrl = await convex.query(api.apkStorage.getApkDownloadUrl, {
-      storageId: currentApk.storageId,
-    })
+    // Use redirect URL (permanent, doesn't expire)
+    // TestDPC baseline test proved Android DOES follow redirects
+    const serverUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bbtec-mdm.vercel.app"
+    const apkUrl = `${serverUrl}/api/apps/${currentApk.storageId}`
 
-    console.log('[QR GEN] APK URL from Convex:', apkUrl)
+    console.log('[QR GEN] APK URL (redirect):', apkUrl)
     console.log('[QR GEN] Storage ID:', currentApk.storageId)
-
-    if (!apkUrl || apkUrl.trim() === '') {
-      return {
-        success: false,
-        error: `Failed to generate APK download URL. StorageId: ${currentApk.storageId}`,
-      }
-    }
 
     // Create enrollment token
     const tokenId = await convex.mutation(api.enrollmentTokens.createEnrollmentToken, {
@@ -75,8 +67,6 @@ export async function createEnrollmentQRCode(
     }
 
     // Build Android provisioning JSON (custom DPC format)
-    const serverUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bbtec-mdm.vercel.app"
-
     console.log('[QR GEN] Server URL:', serverUrl)
     console.log('[QR GEN] Enrollment token:', token.token.substring(0, 8) + '...')
 
