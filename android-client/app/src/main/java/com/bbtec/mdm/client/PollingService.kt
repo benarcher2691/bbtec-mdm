@@ -1,8 +1,12 @@
 package com.bbtec.mdm.client
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -19,7 +23,16 @@ class PollingService : Service() {
 
         fun startService(context: Context) {
             Log.d(TAG, "startService called")
-            context.startService(Intent(context, PollingService::class.java))
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    // Android 8+ requires startForegroundService
+                    context.startForegroundService(Intent(context, PollingService::class.java))
+                } else {
+                    context.startService(Intent(context, PollingService::class.java))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start PollingService", e)
+            }
         }
 
         fun stopService(context: Context) {
@@ -31,6 +44,33 @@ class PollingService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "onCreate called")
+
+        // Start as foreground service on Android 8+ to avoid background restrictions
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channelId = "mdm_service_channel"
+            val channelName = "MDM Service"
+
+            // Create notification channel
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val channel = NotificationChannel(
+                channelId,
+                channelName,
+                NotificationManager.IMPORTANCE_LOW
+            )
+            notificationManager.createNotificationChannel(channel)
+
+            // Create notification
+            val notification = Notification.Builder(this, channelId)
+                .setContentTitle("BBTec MDM")
+                .setContentText("Device management active")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .build()
+
+            // Start as foreground
+            startForeground(1, notification)
+            Log.d(TAG, "Started as foreground service")
+        }
+
         prefsManager = PreferencesManager(this)
         apiClient = ApiClient(this)
         startPolling()

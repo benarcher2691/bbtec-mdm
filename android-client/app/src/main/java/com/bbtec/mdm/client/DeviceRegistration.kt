@@ -100,23 +100,26 @@ class DeviceRegistration(private val context: Context) {
         val serverUrl = prefsManager.getServerUrl()
         Log.d(TAG, "Registering device with enrollment token at: $serverUrl")
 
-        // Get device information
-        val serialNumber = try {
-            Build.getSerial()
-        } catch (e: SecurityException) {
-            Log.w(TAG, "Cannot access serial number", e)
-            Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
-        }
+        // Check Device Owner status first
+        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val adminComponent = ComponentName(context, MdmDeviceAdminReceiver::class.java)
+        val isDeviceOwner = dpm.isDeviceOwnerApp(context.packageName)
+
+        // Get device information using Device Owner APIs
+        // Note: DevicePolicyManager doesn't have getSerialNumber() - we need to use
+        // the special Device Owner privilege to request READ_PHONE_STATE at runtime
+        // For now, use Android ID which is stable and unique per device
+        val serialNumber = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ANDROID_ID
+        )
+
+        Log.d(TAG, "Using Android ID as device identifier (Device Owner: $isDeviceOwner)")
 
         val androidId = Settings.Secure.getString(
             context.contentResolver,
             Settings.Secure.ANDROID_ID
         )
-
-        // Check Device Owner status
-        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        val adminComponent = ComponentName(context, MdmDeviceAdminReceiver::class.java)
-        val isDeviceOwner = dpm.isDeviceOwnerApp(context.packageName)
 
         Log.d(TAG, "Device Info - Serial: $serialNumber, Android ID: $androidId")
         Log.d(TAG, "Is Device Owner: $isDeviceOwner")
