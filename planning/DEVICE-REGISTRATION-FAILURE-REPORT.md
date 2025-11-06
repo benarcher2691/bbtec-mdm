@@ -1026,6 +1026,149 @@ try {
 
 ---
 
+## Update: November 6, 2025 - v0.0.22 Released (Diagnostic Build)
+
+### Changes in v0.0.22
+
+**Objective:** Make backend response handling fully visible on release builds to diagnose why devices aren't appearing in the web UI.
+
+**Problem:** All success response logs in `DeviceRegistration.kt` used `Log.d()` which is filtered on release builds. We could only see error responses with `Log.e()`, making it impossible to determine if:
+- The backend returned a success response with API token
+- The API token was successfully saved to device preferences
+- The heartbeat request was sent after registration
+
+**Solution:** Changed all response logs to `Log.e()` with comprehensive step-by-step tracking.
+
+**Code Changes:**
+
+**File:** `android-client/app/src/main/java/com/bbtec/mdm/client/DeviceRegistration.kt`
+
+```kotlin
+// BEFORE (v0.0.21) - Lines 154-177
+client.newCall(request).enqueue(object : Callback {
+    override fun onResponse(call: Call, response: Response) {
+        Log.d(TAG, "DPC registration response: ${response.code}")  // ❌ Invisible!
+        if (response.isSuccessful) {
+            val body = response.body?.string()
+            Log.d(TAG, "DPC registration response body: $body")  // ❌ Invisible!
+            // ... more Log.d() calls ...
+        }
+    }
+})
+
+// AFTER (v0.0.22) - Lines 154-201
+client.newCall(request).enqueue(object : Callback {
+    override fun onResponse(call: Call, response: Response) {
+        Log.e(TAG, "═══ DPC REGISTRATION RESPONSE RECEIVED ═══")  // ✅ Visible!
+        Log.e(TAG, "Response code: ${response.code}")
+        Log.e(TAG, "Response successful: ${response.isSuccessful}")
+
+        if (response.isSuccessful) {
+            val body = response.body?.string()
+            Log.e(TAG, "Response body: $body")  // ✅ Full response visible!
+
+            // Added error handling for JSON parsing
+            val result = try {
+                gson.fromJson(body, RegistrationResponse::class.java)
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to parse response JSON: ${e.message}", e)
+                null
+            }
+
+            if (result?.success == true && result.apiToken != null) {
+                Log.e(TAG, "✅ API token received from backend!")
+                Log.e(TAG, "API token length: ${result.apiToken.length}")
+                Log.e(TAG, "API token: ${if (result.apiToken.length > 12) result.apiToken.take(12) + "..." else result.apiToken}")
+
+                prefsManager.setDeviceId(serialNumber)
+                prefsManager.setApiToken(result.apiToken)
+                prefsManager.setRegistered(true)
+                Log.e(TAG, "✅ Device ID and API token saved to preferences!")
+                Log.e(TAG, "✅ Registration flag set to true!")
+
+                Log.e(TAG, "🚀 Sending immediate heartbeat after DPC registration...")
+                ApiClient(context).sendHeartbeat()
+            } else {
+                Log.e(TAG, "❌ DPC registration response missing success or apiToken!")
+                Log.e(TAG, "result.success: ${result?.success}")
+                Log.e(TAG, "result.apiToken: ${result?.apiToken}")
+            }
+        } else {
+            val errorBody = response.body?.string()
+            Log.e(TAG, "❌ DPC registration failed with status ${response.code}")
+            Log.e(TAG, "Error body: $errorBody")
+        }
+    }
+
+    override fun onFailure(call: Call, e: java.io.IOException) {
+        Log.e(TAG, "❌❌❌ DPC registration network failure!", e)
+        Log.e(TAG, "Exception: ${e.message}")
+        e.printStackTrace()
+    }
+})
+```
+
+**What We'll Learn from v0.0.22:**
+
+This diagnostic build will definitively tell us:
+
+1. **If backend returns success:**
+   - ✅ See full JSON response body with `apiToken`, `deviceId`, `policyId`
+   - ✅ Confirm API token was saved to preferences
+   - ✅ Confirm heartbeat was sent immediately after registration
+
+2. **If backend returns error:**
+   - ✅ See exact HTTP status code
+   - ✅ See error message from backend
+   - ✅ Determine if it's a validation error, token issue, or database error
+
+3. **If network fails:**
+   - ✅ See IOException details
+   - ✅ Determine if it's DNS, connection timeout, SSL, etc.
+
+**Expected Outcome:**
+
+After provisioning with v0.0.22, we should see one of these scenarios in logcat:
+
+**Scenario A: Success (Device should appear in UI)**
+```
+E/DeviceRegistration: ═══ DPC REGISTRATION RESPONSE RECEIVED ═══
+E/DeviceRegistration: Response code: 200
+E/DeviceRegistration: Response successful: true
+E/DeviceRegistration: Response body: {"success":true,"deviceId":"...","apiToken":"...","policyId":"..."}
+E/DeviceRegistration: ✅ API token received from backend!
+E/DeviceRegistration: ✅ Device ID and API token saved to preferences!
+E/DeviceRegistration: 🚀 Sending immediate heartbeat after DPC registration...
+```
+If we see this but device still not in UI → **User authentication/query filtering bug**
+
+**Scenario B: Backend Error**
+```
+E/DeviceRegistration: ═══ DPC REGISTRATION RESPONSE RECEIVED ═══
+E/DeviceRegistration: Response code: 500
+E/DeviceRegistration: Response successful: false
+E/DeviceRegistration: ❌ DPC registration failed with status 500
+E/DeviceRegistration: Error body: {"error":"Registration failed","details":"..."}
+```
+If we see this → **Backend mutation throwing exception**
+
+**Scenario C: Network Failure**
+```
+E/DeviceRegistration: ❌❌❌ DPC registration network failure!
+E/DeviceRegistration: Exception: Unable to resolve host...
+```
+If we see this → **DNS/connectivity issue during provisioning**
+
+**APK Details:**
+- **File:** `artifacts/apks/bbtec-mdm-client-0.0.22.apk`
+- **Version Code:** 22
+- **Version Name:** 0.0.22
+- **Signature Checksum:** `53:CD:0E:1A:9E:3F:3A:38:C6:66:84:2A:98:94:CA:8E:B1:ED:DC:DC:F4:FB:0E:13:10:B3:03:8F:A7:1B:CE:21`
+- **Build Date:** November 6, 2025
+- **Status:** ✅ Ready for upload and testing
+
+---
+
 **Report Prepared By:** Claude Code
-**Last Updated:** November 6, 2025 (20:15 UTC)
-**Document Version:** 2.0
+**Last Updated:** November 6, 2025 (21:05 UTC)
+**Document Version:** 2.1
