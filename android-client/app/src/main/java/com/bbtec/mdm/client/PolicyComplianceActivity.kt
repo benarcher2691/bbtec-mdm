@@ -52,11 +52,41 @@ class PolicyComplianceActivity : Activity() {
     private fun performPolicyCompliance() {
         Log.d(TAG, "Performing initial policy compliance...")
 
-        // TODO: Add any initial policy setup here if needed
-        // For example:
-        // - Check device meets requirements
-        // - Apply initial restrictions
-        // - Register with server (if not done in onProfileProvisioningComplete)
+        // Check if we achieved Device Owner status
+        val dpm = getSystemService(DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val isDeviceOwner = dpm.isDeviceOwnerApp(packageName)
+
+        if (isDeviceOwner) {
+            Log.d(TAG, "✅ Device Owner mode confirmed!")
+        } else {
+            Log.w(TAG, "⚠️ Not Device Owner - may be Profile Owner instead")
+        }
+
+        // Retrieve saved enrollment token from preferences
+        val prefsManager = PreferencesManager(this)
+        val enrollmentToken = prefsManager.getEnrollmentToken()
+        val serverUrl = prefsManager.getServerUrl()
+
+        Log.d(TAG, "Server URL: $serverUrl")
+        Log.d(TAG, "Enrollment token available: ${enrollmentToken != null}")
+
+        if (enrollmentToken != null && serverUrl != null) {
+            // Register device with backend
+            Log.d(TAG, "Registering device with enrollment token...")
+            DeviceRegistration(this).registerDeviceWithToken(enrollmentToken)
+
+            // Start polling service
+            Log.d(TAG, "Starting polling service...")
+            PollingService.startService(this)
+
+            // Apply initial policies
+            Log.d(TAG, "Syncing policies...")
+            PolicyManager(this).syncPolicies()
+
+            Log.d(TAG, "✅ Device registration and policy sync complete")
+        } else {
+            Log.w(TAG, "⚠️ No enrollment token or server URL - skipping registration")
+        }
 
         // Complete the compliance flow
         completeCompliance()
