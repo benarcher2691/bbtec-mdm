@@ -108,16 +108,19 @@ class DeviceRegistration(private val context: Context) {
         val adminComponent = ComponentName(context, MdmDeviceAdminReceiver::class.java)
         val isDeviceOwner = dpm.isDeviceOwnerApp(context.packageName)
 
-        // Get device information using Device Owner APIs
-        // Note: DevicePolicyManager doesn't have getSerialNumber() - we need to use
-        // the special Device Owner privilege to request READ_PHONE_STATE at runtime
-        // For now, use Android ID which is stable and unique per device
-        val serialNumber = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ANDROID_ID
-        )
+        // Get hardware serial number (matches registerDevice() logic)
+        val serialNumber = try {
+            Build.getSerial()
+        } catch (e: SecurityException) {
+            // Fallback to ANDROID_ID if serial number is not accessible
+            Log.w(TAG, "Cannot access serial number, falling back to ANDROID_ID", e)
+            Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ANDROID_ID
+            )
+        }
 
-        Log.e(TAG, "Using Android ID as device identifier")
+        Log.e(TAG, "Hardware serial number: $serialNumber")
 
         val androidId = Settings.Secure.getString(
             context.contentResolver,

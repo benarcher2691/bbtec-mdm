@@ -9,8 +9,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
-    <!-- Optional / only if truly needed -->
-    <!-- <uses-permission android:name="android.permission.READ_PHONE_STATE" /> -->
+    <!-- Required for Build.getSerial() to get hardware serial number -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
     <!-- NOTE: Removed WRITE_SECURE_SETTINGS and all MANAGE_DEVICE_POLICY_* permissions:
          they're signature/privileged and won't be granted to a DPC on Android 10. -->
