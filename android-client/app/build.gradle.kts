@@ -5,14 +5,14 @@ plugins {
 
 android {
     namespace = "com.bbtec.mdm.client"
-    compileSdk = 36
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.bbtec.mdm.client"
         minSdk = 29
-        targetSdk = 36
-        versionCode = 12
-        versionName = "0.0.12-test"
+        targetSdk = 34
+        versionCode = 14
+        versionName = "0.0.14"
     }
 
     signingConfigs {
