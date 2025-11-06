@@ -23,11 +23,13 @@ async function getAuthenticatedConvexClient() {
  * @param policyId - Policy to apply to the device
  * @param duration - Token validity duration in seconds
  * @param testMode - If true, omits PROVISIONING_ADMIN_EXTRAS_BUNDLE (for Device Owner testing on Android 10)
+ * @param dpcType - 'bbtec' for BBTec MDM, 'testdpc' for Google Test DPC comparison
  */
 export async function createEnrollmentQRCode(
   policyId: Id<"policies">,
   duration: number = 3600,
-  testMode: boolean = false
+  testMode: boolean = false,
+  dpcType: 'bbtec' | 'testdpc' = 'bbtec'
 ) {
   const { userId } = await auth()
 
@@ -37,24 +39,50 @@ export async function createEnrollmentQRCode(
 
   try {
     const convex = await getAuthenticatedConvexClient()
+    const serverUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bbtec-mdm.vercel.app"
 
-    // Get current APK metadata
-    const currentApk = await convex.query(api.apkStorage.getCurrentApk)
-
-    if (!currentApk) {
-      return {
-        success: false,
-        error: 'No DPC APK uploaded. Please upload the client APK first.',
-      }
+    // DPC configuration based on type
+    let dpcConfig: {
+      componentName: string
+      packageName: string
+      apkUrl: string
+      signatureChecksum: string
+      version?: string
     }
 
-    // Use redirect URL (permanent, doesn't expire)
-    // TestDPC baseline test proved Android DOES follow redirects
-    const serverUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bbtec-mdm.vercel.app"
-    const apkUrl = `${serverUrl}/api/apps/${currentApk.storageId}`
+    if (dpcType === 'testdpc') {
+      // Google Test DPC for comparison testing
+      // Upload TestDPC APK and update this storage ID
+      const testdpcStorageId = 'UPLOAD_TESTDPC_APK_FIRST' // TODO: Upload TestDPC APK to get real storage ID
+      dpcConfig = {
+        componentName: 'com.afwsamples.testdpc/com.afwsamples.testdpc.DeviceAdminReceiver',
+        packageName: 'com.afwsamples.testdpc',
+        apkUrl: `${serverUrl}/api/apps/${testdpcStorageId}`,
+        signatureChecksum: 'gJD2YwtOiWJHkSMkkIfLRlj-quNqG1fb6v100QmzM9w',
+        version: '9.0.12 (TestDPC)',
+      }
+      console.log('[QR GEN] Using Test DPC for comparison')
+    } else {
+      // BBTec MDM Client
+      const currentApk = await convex.query(api.apkStorage.getCurrentApk)
 
-    console.log('[QR GEN] APK URL (redirect):', apkUrl)
-    console.log('[QR GEN] Storage ID:', currentApk.storageId)
+      if (!currentApk) {
+        return {
+          success: false,
+          error: 'No DPC APK uploaded. Please upload the client APK first.',
+        }
+      }
+
+      dpcConfig = {
+        componentName: 'com.bbtec.mdm.client/com.bbtec.mdm.client.MdmDeviceAdminReceiver',
+        packageName: 'com.bbtec.mdm.client',
+        apkUrl: `${serverUrl}/api/apps/${currentApk.storageId}`,
+        signatureChecksum: currentApk.signatureChecksum,
+        version: currentApk.version,
+      }
+      console.log('[QR GEN] APK URL (redirect):', dpcConfig.apkUrl)
+      console.log('[QR GEN] Storage ID:', currentApk.storageId)
+    }
 
     // Create enrollment token
     const tokenId = await convex.mutation(api.enrollmentTokens.createEnrollmentToken, {
@@ -77,10 +105,10 @@ export async function createEnrollmentQRCode(
     console.log('[QR GEN] Test mode:', testMode)
 
     const provisioningData: Record<string, unknown> = {
-      "android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME": "com.bbtec.mdm.client/com.bbtec.mdm.client.MdmDeviceAdminReceiver",
-      "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_NAME": "com.bbtec.mdm.client",
-      "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION": apkUrl,
-      "android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM": currentApk.signatureChecksum,
+      "android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME": dpcConfig.componentName,
+      "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_NAME": dpcConfig.packageName,
+      "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION": dpcConfig.apkUrl,
+      "android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM": dpcConfig.signatureChecksum,
       "android.app.extra.PROVISIONING_SKIP_ENCRYPTION": false,
     }
 
@@ -127,12 +155,13 @@ export async function createEnrollmentQRCode(
       token: token.token,
       qrCode: qrCodeDataUrl,
       expirationTimestamp: new Date(token.expiresAt).toISOString(),
-      apkVersion: currentApk.version,
+      apkVersion: dpcConfig.version,
       debug: {
-        apkUrl,
+        apkUrl: dpcConfig.apkUrl,
         serverUrl,
-        storageId: currentApk.storageId,
+        storageId: dpcConfig.apkUrl.split('/').pop() || '',
         convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
+        dpcType,
       },
     }
   } catch (error) {

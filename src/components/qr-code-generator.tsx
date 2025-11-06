@@ -36,6 +36,7 @@ export function QRCodeGenerator() {
   const [deviceCountBefore, setDeviceCountBefore] = useState(0)
   const [selectedPolicyId, setSelectedPolicyId] = useState<Id<"policies"> | null>(null)
   const [testMode, setTestMode] = useState(false)
+  const [dpcType, setDpcType] = useState<'bbtec' | 'testdpc'>('bbtec')
   const pollingInterval = useRef<NodeJS.Timeout | null>(null)
 
   // Query policies from Convex
@@ -66,7 +67,7 @@ export function QRCodeGenerator() {
         setDeviceCountBefore(devicesResult.devices.length)
       }
 
-      const result = await createEnrollmentQRCode(selectedPolicyId, 3600, testMode)
+      const result = await createEnrollmentQRCode(selectedPolicyId, 3600, testMode, dpcType)
 
       console.log('[QR GEN CLIENT] Full result:', result)
       console.log('[QR GEN CLIENT] Debug object:', result.debug)
@@ -154,6 +155,40 @@ export function QRCodeGenerator() {
 
   return (
     <div className="space-y-6">
+      {/* DPC Type Selection */}
+      <div className="space-y-2">
+        <Label>DPC Application</Label>
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="dpc-type"
+              value="bbtec"
+              checked={dpcType === 'bbtec'}
+              onChange={(e) => setDpcType('bbtec')}
+              className="h-4 w-4"
+            />
+            <span className="text-sm">BBTec MDM Client</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="dpc-type"
+              value="testdpc"
+              checked={dpcType === 'testdpc'}
+              onChange={(e) => setDpcType('testdpc')}
+              className="h-4 w-4"
+            />
+            <span className="text-sm">Google Test DPC (for comparison)</span>
+          </label>
+        </div>
+        {dpcType === 'testdpc' && (
+          <p className="text-xs text-blue-700 bg-blue-50 p-2 rounded border border-blue-200">
+            Using Google's Test DPC to verify Device Owner mode can be achieved on this device.
+          </p>
+        )}
+      </div>
+
       {/* Policy Selection */}
       <div className="space-y-2">
         <Label htmlFor="policy-select">Policy</Label>
