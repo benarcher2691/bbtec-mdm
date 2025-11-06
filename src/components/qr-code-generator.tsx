@@ -184,7 +184,7 @@ export function QRCodeGenerator() {
         </div>
         {dpcType === 'testdpc' && (
           <p className="text-xs text-blue-700 bg-blue-50 p-2 rounded border border-blue-200">
-            Using Google's Test DPC to verify Device Owner mode can be achieved on this device.
+            Using Google&apos;s Test DPC to verify Device Owner mode can be achieved on this device.
           </p>
         )}
       </div>
