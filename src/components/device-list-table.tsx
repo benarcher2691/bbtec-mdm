@@ -381,7 +381,7 @@ export function DeviceListTable() {
                   Remove device <strong>{deviceToDelete?.name}</strong> from the device list?
                   <br /><br />
                   The device will be removed from management. If the device is still active,
-                  it will continue to function normally but won't receive policy updates.
+                  it will continue to function normally but won&apos;t receive policy updates.
                 </>
               )}
             </AlertDialogDescription>
