@@ -19,10 +19,15 @@ async function getAuthenticatedConvexClient() {
 /**
  * Create custom enrollment QR code (NEW: Custom DPC)
  * Replaces Android Management API token generation
+ *
+ * @param policyId - Policy to apply to the device
+ * @param duration - Token validity duration in seconds
+ * @param testMode - If true, omits PROVISIONING_ADMIN_EXTRAS_BUNDLE (for Device Owner testing on Android 10)
  */
 export async function createEnrollmentQRCode(
   policyId: Id<"policies">,
-  duration: number = 3600
+  duration: number = 3600,
+  testMode: boolean = false
 ) {
   const { userId } = await auth()
 
@@ -69,17 +74,27 @@ export async function createEnrollmentQRCode(
     // Build Android provisioning JSON (custom DPC format)
     console.log('[QR GEN] Server URL:', serverUrl)
     console.log('[QR GEN] Enrollment token:', token.token.substring(0, 8) + '...')
+    console.log('[QR GEN] Test mode:', testMode)
 
-    const provisioningData = {
+    const provisioningData: Record<string, unknown> = {
       "android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME": "com.bbtec.mdm.client/com.bbtec.mdm.client.MdmDeviceAdminReceiver",
       "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_NAME": "com.bbtec.mdm.client",
       "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION": apkUrl,
       "android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM": currentApk.signatureChecksum,
       "android.app.extra.PROVISIONING_SKIP_ENCRYPTION": false,
-      "android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE": {
+    }
+
+    // Only include admin extras bundle if NOT in test mode
+    // TEST: On Android 10, admin extras bundle might force Profile Owner mode
+    if (!testMode) {
+      provisioningData["android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE"] = {
         "server_url": serverUrl,
         "enrollment_token": token.token,
       }
+    } else {
+      console.log('[QR GEN] ⚠️ TEST MODE: Omitting PROVISIONING_ADMIN_EXTRAS_BUNDLE')
+      console.log('[QR GEN] ⚠️ Device will NOT register automatically')
+      console.log('[QR GEN] ⚠️ Purpose: Test Device Owner mode on Android 10')
     }
 
     // Generate QR code from JSON

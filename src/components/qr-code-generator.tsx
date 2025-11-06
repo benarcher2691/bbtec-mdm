@@ -35,6 +35,7 @@ export function QRCodeGenerator() {
   const [waitingForEnrollment, setWaitingForEnrollment] = useState(false)
   const [deviceCountBefore, setDeviceCountBefore] = useState(0)
   const [selectedPolicyId, setSelectedPolicyId] = useState<Id<"policies"> | null>(null)
+  const [testMode, setTestMode] = useState(false)
   const pollingInterval = useRef<NodeJS.Timeout | null>(null)
 
   // Query policies from Convex
@@ -65,7 +66,7 @@ export function QRCodeGenerator() {
         setDeviceCountBefore(devicesResult.devices.length)
       }
 
-      const result = await createEnrollmentQRCode(selectedPolicyId, 3600)
+      const result = await createEnrollmentQRCode(selectedPolicyId, 3600, testMode)
 
       console.log('[QR GEN CLIENT] Full result:', result)
       console.log('[QR GEN CLIENT] Debug object:', result.debug)
@@ -174,6 +175,28 @@ export function QRCodeGenerator() {
         </Select>
       </div>
 
+      {/* Test Mode Checkbox */}
+      <div className="flex items-start space-x-3 p-4 border border-yellow-200 bg-yellow-50 rounded-lg">
+        <input
+          type="checkbox"
+          id="test-mode"
+          checked={testMode}
+          onChange={(e) => setTestMode(e.target.checked)}
+          className="mt-1 h-4 w-4 rounded border-gray-300"
+        />
+        <div className="flex-1">
+          <Label
+            htmlFor="test-mode"
+            className="text-sm font-medium cursor-pointer"
+          >
+            Test Mode (Android 10 Device Owner Testing)
+          </Label>
+          <p className="text-xs text-yellow-800 mt-1">
+            ⚠️ Omits PROVISIONING_ADMIN_EXTRAS_BUNDLE from QR code. Use ONLY with v0.0.12-test APK to test Device Owner mode. Device will NOT register with server.
+          </p>
+        </div>
+      </div>
+
       {/* Generate Button */}
       <div className="flex gap-4 items-center">
         <Button
@@ -249,6 +272,22 @@ export function QRCodeGenerator() {
       {tokenData && !enrolledDevice && (
         <div className="rounded-lg border bg-card p-6">
           <h3 className="text-lg font-semibold mb-4">Enrollment QR Code</h3>
+
+          {/* Test Mode Warning */}
+          {testMode && (
+            <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                <div>
+                  <h4 className="font-semibold text-yellow-900">Test Mode Active</h4>
+                  <p className="text-sm text-yellow-800 mt-1">
+                    This QR code does NOT include enrollment token. Device will install v0.0.12-test but will NOT register with server.
+                    Use ONLY for testing Device Owner status on Android 10.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid md:grid-cols-2 gap-6">
             {/* QR Code Image */}

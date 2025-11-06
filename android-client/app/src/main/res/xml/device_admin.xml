@@ -1,16 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Signal Device Owner capability (Android 8.0+) -->
+    <headless-system-user
+        headless-device-owner-mode="single_user"
+        device-owner-mode="affiliated" />
+
+    <!-- Signal ownership transfer support -->
+    <support-transfer-ownership/>
+
     <uses-policies>
         <!-- Basic device admin policies -->
+        <limit-password />
+        <watch-login />
+        <reset-password />
         <force-lock />
         <wipe-data />
-        <reset-password />
-        <limit-password />
+        <expire-password />
+        <encrypted-storage />
 
         <!-- Device Owner policies -->
         <disable-camera />
         <disable-keyguard-features />
-        <expire-password />
-        <encrypted-storage />
     </uses-policies>
 </device-admin>

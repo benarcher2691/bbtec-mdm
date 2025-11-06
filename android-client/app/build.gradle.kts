@@ -11,8 +11,8 @@ android {
         applicationId = "com.bbtec.mdm.client"
         minSdk = 29
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.0.9"
+        versionCode = 12
+        versionName = "0.0.12-test"
     }
 
     signingConfigs {
