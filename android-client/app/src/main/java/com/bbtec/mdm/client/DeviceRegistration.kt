@@ -98,7 +98,10 @@ class DeviceRegistration(private val context: Context) {
      */
     fun registerDeviceWithToken(enrollmentToken: String) {
         val serverUrl = prefsManager.getServerUrl()
-        Log.d(TAG, "Registering device with enrollment token at: $serverUrl")
+        Log.e(TAG, "═══ registerDeviceWithToken CALLED ═══")
+        Log.e(TAG, "Server URL: $serverUrl")
+        Log.e(TAG, "Enrollment token length: ${enrollmentToken.length}")
+        Log.e(TAG, "Enrollment token: ${if (enrollmentToken.length > 12) enrollmentToken.take(12) + "..." else enrollmentToken}")
 
         // Check Device Owner status first
         val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
@@ -114,15 +117,18 @@ class DeviceRegistration(private val context: Context) {
             Settings.Secure.ANDROID_ID
         )
 
-        Log.d(TAG, "Using Android ID as device identifier (Device Owner: $isDeviceOwner)")
+        Log.e(TAG, "Using Android ID as device identifier")
 
         val androidId = Settings.Secure.getString(
             context.contentResolver,
             Settings.Secure.ANDROID_ID
         )
 
-        Log.d(TAG, "Device Info - Serial: $serialNumber, Android ID: $androidId")
-        Log.d(TAG, "Is Device Owner: $isDeviceOwner")
+        Log.e(TAG, "Serial/Android ID: $serialNumber")
+        Log.e(TAG, "Is Device Owner: $isDeviceOwner")
+        Log.e(TAG, "Model: ${Build.MODEL}")
+        Log.e(TAG, "Manufacturer: ${Build.MANUFACTURER}")
+        Log.e(TAG, "Android version: ${Build.VERSION.RELEASE}")
 
         // Build registration request
         val requestData = mapOf(
@@ -136,13 +142,14 @@ class DeviceRegistration(private val context: Context) {
         )
 
         val json = gson.toJson(requestData)
+        Log.e(TAG, "Request JSON: $json")
 
         val request = Request.Builder()
             .url("$serverUrl/api/dpc/register")
             .post(json.toRequestBody("application/json".toMediaType()))
             .build()
 
-        Log.d(TAG, "Sending DPC registration request...")
+        Log.e(TAG, "Sending DPC registration request to: $serverUrl/api/dpc/register")
         client.newCall(request).enqueue(object : Callback {
             override fun onResponse(call: Call, response: Response) {
                 Log.d(TAG, "DPC registration response: ${response.code}")

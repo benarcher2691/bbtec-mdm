@@ -24,10 +24,24 @@ class PolicyComplianceActivity : Activity() {
             Log.e(TAG, "Intent action: ${intent?.action}")
             Log.e(TAG, "Intent extras: ${intent?.extras?.keySet()?.joinToString(", ")}")
 
+            // Debug: Log all extras
+            intent?.extras?.let { bundle ->
+                Log.e(TAG, "All extras in bundle:")
+                for (key in bundle.keySet()) {
+                    val value = bundle.get(key)
+                    Log.e(TAG, "  Key: $key, Value type: ${value?.javaClass?.name}, Value: $value")
+                }
+            }
+
             // Retrieve the provisioning admin extras bundle
-            val adminExtras = intent.getBundleExtra(
-                DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE
-            )
+            Log.e(TAG, "Attempting to retrieve admin extras bundle with key: ${DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE}")
+            val adminExtras = try {
+                intent.getBundleExtra(DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE)
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Exception retrieving admin extras: ${e.message}", e)
+                null
+            }
+            Log.e(TAG, "Admin extras result: ${if (adminExtras != null) "NOT NULL" else "NULL"}")
 
             if (adminExtras != null) {
                 val serverUrl = adminExtras.getString("server_url")
@@ -84,7 +98,12 @@ class PolicyComplianceActivity : Activity() {
             val serverUrl = prefsManager.getServerUrl()
 
             Log.e(TAG, "Server URL from prefs: $serverUrl")
-            Log.e(TAG, "Enrollment token from prefs: ${if (enrollmentToken != null) enrollmentToken.take(8) + "..." else "NULL"}")
+            if (enrollmentToken != null) {
+                Log.e(TAG, "Enrollment token length: ${enrollmentToken.length}")
+                Log.e(TAG, "Enrollment token from prefs: ${if (enrollmentToken.length > 12) enrollmentToken.take(12) + "..." else enrollmentToken}")
+            } else {
+                Log.e(TAG, "Enrollment token from prefs: NULL")
+            }
 
             if (enrollmentToken != null && serverUrl != null) {
                 // Register device with backend
