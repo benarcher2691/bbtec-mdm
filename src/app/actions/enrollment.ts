@@ -52,13 +52,13 @@ export async function createEnrollmentQRCode(
 
     if (dpcType === 'testdpc') {
       // Google Test DPC for comparison testing
-      // Upload TestDPC APK and update this storage ID
-      const testdpcStorageId = 'UPLOAD_TESTDPC_APK_FIRST' // TODO: Upload TestDPC APK to get real storage ID
+      // Hardcoded values (upload code has signature extraction bug)
+      const testdpcStorageId = 'kg23cdbbs108fmjm6qrxzm2d517twwhf'
       dpcConfig = {
         componentName: 'com.afwsamples.testdpc/com.afwsamples.testdpc.DeviceAdminReceiver',
         packageName: 'com.afwsamples.testdpc',
         apkUrl: `${serverUrl}/api/apps/${testdpcStorageId}`,
-        signatureChecksum: 'gJD2YwtOiWJHkSMkkIfLRlj-quNqG1fb6v100QmzM9w',
+        signatureChecksum: 'gJD2YwtOiWJHkSMkkIfLRlj-quNqG1fb6v100QmzM9w', // Correct TestDPC signature
         version: '9.0.12 (TestDPC)',
       }
       console.log('[QR GEN] Using Test DPC for comparison')
