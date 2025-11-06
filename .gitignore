@@ -28,6 +28,7 @@ Thumbs.db
 # Logs
 logs/
 *.log
+logs_result-*.csv
 
 # Build output
 dist/
