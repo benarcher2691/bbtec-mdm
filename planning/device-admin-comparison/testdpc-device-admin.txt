@@ -1,0 +1,1 @@
+ERROR: dump failed because resource res/xml/device_admin.xml not found
