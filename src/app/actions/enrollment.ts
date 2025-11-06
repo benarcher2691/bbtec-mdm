@@ -132,9 +132,9 @@ export async function createEnrollmentQRCode(
     console.log('[QR GEN] provisioningData object:', provisioningData)
     console.log('[QR GEN] QR Content (first 500 chars):', qrContent.substring(0, 500))
     console.log('QR Code provisioning data:', {
-      apkUrlLength: apkUrl?.length,
+      apkUrlLength: dpcConfig.apkUrl?.length,
       totalJsonLength: qrContent.length,
-      signatureChecksum: currentApk.signatureChecksum,
+      signatureChecksum: dpcConfig.signatureChecksum,
     })
 
     if (qrContent.length > 4000) {
