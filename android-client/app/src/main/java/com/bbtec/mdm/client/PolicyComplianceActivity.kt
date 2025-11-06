@@ -34,25 +34,58 @@ class PolicyComplianceActivity : Activity() {
             }
 
             // Retrieve the provisioning admin extras bundle
+            // CRITICAL: Android passes this as PersistableBundle, not Bundle!
             Log.e(TAG, "Attempting to retrieve admin extras bundle with key: ${DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE}")
-            val adminExtras = try {
-                intent.getBundleExtra(DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE)
+
+            // Try PersistableBundle first (Android 8+)
+            val persistableExtras = try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                    intent.getParcelableExtra<android.os.PersistableBundle>(
+                        DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE
+                    )
+                } else {
+                    null
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Exception retrieving admin extras: ${e.message}", e)
+                Log.e(TAG, "❌ Exception retrieving PersistableBundle: ${e.message}", e)
                 null
             }
-            Log.e(TAG, "Admin extras result: ${if (adminExtras != null) "NOT NULL" else "NULL"}")
 
-            if (adminExtras != null) {
-                val serverUrl = adminExtras.getString("server_url")
-                val enrollmentToken = adminExtras.getString("enrollment_token")
+            Log.e(TAG, "PersistableBundle result: ${if (persistableExtras != null) "NOT NULL" else "NULL"}")
 
-                Log.e(TAG, "✅ Admin extras found!")
+            // Convert PersistableBundle to regular values
+            var serverUrl: String? = null
+            var enrollmentToken: String? = null
+
+            if (persistableExtras != null) {
+                serverUrl = persistableExtras.getString("server_url")
+                enrollmentToken = persistableExtras.getString("enrollment_token")
+                Log.e(TAG, "✅ Admin extras found in PersistableBundle!")
                 Log.e(TAG, "Server URL: $serverUrl")
-                Log.e(TAG, "Enrollment token: ${enrollmentToken?.take(8)}...")
-                Log.e(TAG, "Admin extras keys: ${adminExtras.keySet()?.joinToString(", ")}")
+                Log.e(TAG, "Enrollment token length: ${enrollmentToken?.length ?: 0}")
+                Log.e(TAG, "Enrollment token: ${if (enrollmentToken != null && enrollmentToken.length > 12) enrollmentToken.take(12) + "..." else enrollmentToken}")
+            } else {
+                // Fallback: Try regular Bundle
+                Log.e(TAG, "PersistableBundle was null, trying regular Bundle...")
+                val adminExtras = try {
+                    intent.getBundleExtra(DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE)
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Exception retrieving Bundle: ${e.message}", e)
+                    null
+                }
 
-                // Save to preferences (in case onProfileProvisioningComplete wasn't called yet)
+                if (adminExtras != null) {
+                    serverUrl = adminExtras.getString("server_url")
+                    enrollmentToken = adminExtras.getString("enrollment_token")
+                    Log.e(TAG, "✅ Admin extras found in regular Bundle!")
+                } else {
+                    Log.e(TAG, "❌ NO admin extras bundle in intent (tried both PersistableBundle and Bundle)!")
+                    Log.e(TAG, "This means the QR code did not contain PROVISIONING_ADMIN_EXTRAS_BUNDLE")
+                }
+            }
+
+            // Save to preferences if we found the values
+            if (serverUrl != null || enrollmentToken != null) {
                 val prefsManager = PreferencesManager(this)
                 if (serverUrl != null) {
                     prefsManager.setServerUrl(serverUrl)
@@ -62,9 +95,6 @@ class PolicyComplianceActivity : Activity() {
                     prefsManager.setEnrollmentToken(enrollmentToken)
                     Log.e(TAG, "✅ Enrollment token saved to preferences")
                 }
-            } else {
-                Log.e(TAG, "❌ NO admin extras bundle in intent!")
-                Log.e(TAG, "This means the QR code did not contain PROVISIONING_ADMIN_EXTRAS_BUNDLE")
             }
 
             // Perform any initial compliance checks here
