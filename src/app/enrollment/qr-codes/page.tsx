@@ -1,24 +1,24 @@
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { QRCodeGenerator } from "@/components/qr-code-generator"
-import { ApkUploader } from "@/components/apk-uploader"
+import { DpcApkManager } from "@/components/dpc-apk-manager"
 import { Separator } from "@/components/ui/separator"
 
 export default function QRCodesPage() {
   return (
     <DashboardLayout>
-      <div className="p-8 max-w-6xl mx-auto">
+      <div className="p-8 max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold mb-4">QR Code Enrollment</h1>
         <p className="text-muted-foreground mb-8">
-          Upload your DPC APK and generate QR codes for device enrollment
+          Manage your DPC APK versions and generate QR codes for device enrollment
         </p>
 
-        {/* APK Upload Section */}
+        {/* APK Management Section */}
         <div className="mb-12">
-          <h2 className="text-2xl font-semibold mb-2">Step 1: Upload DPC APK</h2>
+          <h2 className="text-2xl font-semibold mb-2">Step 1: Manage DPC APK</h2>
           <p className="text-sm text-muted-foreground mb-4">
-            Upload your signed Android DPC APK file. This is required before generating QR codes.
+            Upload and manage your signed Android DPC APK versions. The current version will be used for QR codes.
           </p>
-          <ApkUploader />
+          <DpcApkManager />
         </div>
 
         <Separator className="my-8" />
