@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Register device (creates new or updates existing)
+    // Pass policyId directly to avoid authentication issues
     console.log(`[DPC REGISTER] Registering device in database...`)
     const result = await convex.mutation(api.deviceClients.registerDevice, {
       deviceId: serialNumber,
@@ -93,24 +94,17 @@ export async function POST(request: NextRequest) {
       androidVersion,
       isDeviceOwner: isDeviceOwner ?? true,
       userId: tokenData.userId, // Assign device to token creator
+      policyId: tokenData.policyId, // Assign policy during registration
     })
 
-    console.log(`[DPC REGISTER] Device registered, marking token as used...`)
+    console.log(`[DPC REGISTER] Device registered with policy ${tokenData.policyId || 'none'}`)
 
     // Mark token as used
+    console.log(`[DPC REGISTER] Marking token as used...`)
     await convex.mutation(api.enrollmentTokens.markTokenUsed, {
       token: enrollmentToken,
       deviceId: serialNumber,
     })
-
-    // Assign policy from enrollment token to device
-    if (tokenData.policyId) {
-      console.log(`[DPC REGISTER] Assigning policy ${tokenData.policyId} to device...`)
-      await convex.mutation(api.deviceClients.updateDevicePolicy, {
-        deviceId: serialNumber,
-        policyId: tokenData.policyId,
-      })
-    }
 
     console.log(`[DPC REGISTER] SUCCESS: Device registered`, {
       deviceId: serialNumber,
