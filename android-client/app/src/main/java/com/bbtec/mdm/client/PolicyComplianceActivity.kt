@@ -18,78 +18,101 @@ class PolicyComplianceActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        Log.d(TAG, "PolicyComplianceActivity started")
+        try {
+            Log.e(TAG, "═══ PolicyComplianceActivity STARTED ═══")
+            Log.e(TAG, "Intent: ${intent?.toString()}")
+            Log.e(TAG, "Intent action: ${intent?.action}")
+            Log.e(TAG, "Intent extras: ${intent?.extras?.keySet()?.joinToString(", ")}")
 
-        // Retrieve the provisioning admin extras bundle
-        val adminExtras = intent.getBundleExtra(
-            DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE
-        )
+            // Retrieve the provisioning admin extras bundle
+            val adminExtras = intent.getBundleExtra(
+                DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE
+            )
 
-        if (adminExtras != null) {
-            val serverUrl = adminExtras.getString("server_url")
-            val enrollmentToken = adminExtras.getString("enrollment_token")
+            if (adminExtras != null) {
+                val serverUrl = adminExtras.getString("server_url")
+                val enrollmentToken = adminExtras.getString("enrollment_token")
 
-            Log.d(TAG, "Admin extras received - Server URL: $serverUrl")
-            Log.d(TAG, "Enrollment token: ${enrollmentToken?.take(8)}...")
+                Log.e(TAG, "✅ Admin extras found!")
+                Log.e(TAG, "Server URL: $serverUrl")
+                Log.e(TAG, "Enrollment token: ${enrollmentToken?.take(8)}...")
+                Log.e(TAG, "Admin extras keys: ${adminExtras.keySet()?.joinToString(", ")}")
 
-            // Save to preferences (in case onProfileProvisioningComplete wasn't called yet)
-            val prefsManager = PreferencesManager(this)
-            if (serverUrl != null) {
-                prefsManager.setServerUrl(serverUrl)
+                // Save to preferences (in case onProfileProvisioningComplete wasn't called yet)
+                val prefsManager = PreferencesManager(this)
+                if (serverUrl != null) {
+                    prefsManager.setServerUrl(serverUrl)
+                    Log.e(TAG, "✅ Server URL saved to preferences")
+                }
+                if (enrollmentToken != null) {
+                    prefsManager.setEnrollmentToken(enrollmentToken)
+                    Log.e(TAG, "✅ Enrollment token saved to preferences")
+                }
+            } else {
+                Log.e(TAG, "❌ NO admin extras bundle in intent!")
+                Log.e(TAG, "This means the QR code did not contain PROVISIONING_ADMIN_EXTRAS_BUNDLE")
             }
-            if (enrollmentToken != null) {
-                prefsManager.setEnrollmentToken(enrollmentToken)
-            }
-        } else {
-            Log.w(TAG, "No admin extras bundle provided")
+
+            // Perform any initial compliance checks here
+            // For now, we just complete successfully
+            performPolicyCompliance()
+        } catch (e: Exception) {
+            Log.e(TAG, "❌❌❌ EXCEPTION in onCreate: ${e.message}", e)
+            e.printStackTrace()
+            // Still complete compliance to not block provisioning
+            completeCompliance()
         }
-
-        // Perform any initial compliance checks here
-        // For now, we just complete successfully
-        performPolicyCompliance()
     }
 
     private fun performPolicyCompliance() {
-        Log.d(TAG, "Performing initial policy compliance...")
+        try {
+            Log.e(TAG, "═══ performPolicyCompliance STARTED ═══")
 
-        // Check if we achieved Device Owner status
-        val dpm = getSystemService(DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        val isDeviceOwner = dpm.isDeviceOwnerApp(packageName)
+            // Check if we achieved Device Owner status
+            val dpm = getSystemService(DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            val isDeviceOwner = dpm.isDeviceOwnerApp(packageName)
 
-        if (isDeviceOwner) {
-            Log.d(TAG, "✅ Device Owner mode confirmed!")
-        } else {
-            Log.w(TAG, "⚠️ Not Device Owner - may be Profile Owner instead")
+            if (isDeviceOwner) {
+                Log.e(TAG, "✅✅✅ Device Owner mode confirmed!")
+            } else {
+                Log.e(TAG, "⚠️⚠️⚠️ Not Device Owner - may be Profile Owner instead")
+            }
+
+            // Retrieve saved enrollment token from preferences
+            val prefsManager = PreferencesManager(this)
+            val enrollmentToken = prefsManager.getEnrollmentToken()
+            val serverUrl = prefsManager.getServerUrl()
+
+            Log.e(TAG, "Server URL from prefs: $serverUrl")
+            Log.e(TAG, "Enrollment token from prefs: ${if (enrollmentToken != null) enrollmentToken.take(8) + "..." else "NULL"}")
+
+            if (enrollmentToken != null && serverUrl != null) {
+                // Register device with backend
+                Log.e(TAG, "🚀 Registering device with enrollment token...")
+                DeviceRegistration(this).registerDeviceWithToken(enrollmentToken)
+
+                // Start polling service
+                Log.e(TAG, "🚀 Starting polling service...")
+                PollingService.startService(this)
+
+                // Apply initial policies
+                Log.e(TAG, "🚀 Syncing policies...")
+                PolicyManager(this).syncPolicies()
+
+                Log.e(TAG, "✅✅✅ Device registration and policy sync complete")
+            } else {
+                Log.e(TAG, "❌❌❌ No enrollment token or server URL - skipping registration")
+                Log.e(TAG, "This means the QR code did not include the enrollment token!")
+            }
+
+            // Complete the compliance flow
+            completeCompliance()
+        } catch (e: Exception) {
+            Log.e(TAG, "❌❌❌ EXCEPTION in performPolicyCompliance: ${e.message}", e)
+            e.printStackTrace()
+            // Still complete compliance to not block provisioning
+            completeCompliance()
         }
-
-        // Retrieve saved enrollment token from preferences
-        val prefsManager = PreferencesManager(this)
-        val enrollmentToken = prefsManager.getEnrollmentToken()
-        val serverUrl = prefsManager.getServerUrl()
-
-        Log.d(TAG, "Server URL: $serverUrl")
-        Log.d(TAG, "Enrollment token available: ${enrollmentToken != null}")
-
-        if (enrollmentToken != null && serverUrl != null) {
-            // Register device with backend
-            Log.d(TAG, "Registering device with enrollment token...")
-            DeviceRegistration(this).registerDeviceWithToken(enrollmentToken)
-
-            // Start polling service
-            Log.d(TAG, "Starting polling service...")
-            PollingService.startService(this)
-
-            // Apply initial policies
-            Log.d(TAG, "Syncing policies...")
-            PolicyManager(this).syncPolicies()
-
-            Log.d(TAG, "✅ Device registration and policy sync complete")
-        } else {
-            Log.w(TAG, "⚠️ No enrollment token or server URL - skipping registration")
-        }
-
-        // Complete the compliance flow
-        completeCompliance()
     }
 
     private fun completeCompliance() {
