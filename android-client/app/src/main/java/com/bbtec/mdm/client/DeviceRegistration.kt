@@ -152,32 +152,51 @@ class DeviceRegistration(private val context: Context) {
         Log.e(TAG, "Sending DPC registration request to: $serverUrl/api/dpc/register")
         client.newCall(request).enqueue(object : Callback {
             override fun onResponse(call: Call, response: Response) {
-                Log.d(TAG, "DPC registration response: ${response.code}")
+                Log.e(TAG, "═══ DPC REGISTRATION RESPONSE RECEIVED ═══")
+                Log.e(TAG, "Response code: ${response.code}")
+                Log.e(TAG, "Response successful: ${response.isSuccessful}")
+
                 if (response.isSuccessful) {
                     val body = response.body?.string()
-                    Log.d(TAG, "DPC registration response body: $body")
+                    Log.e(TAG, "Response body: $body")
 
-                    val result = gson.fromJson(body, RegistrationResponse::class.java)
+                    val result = try {
+                        gson.fromJson(body, RegistrationResponse::class.java)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ Failed to parse response JSON: ${e.message}", e)
+                        null
+                    }
 
-                    if (result.success && result.apiToken != null) {
+                    if (result?.success == true && result.apiToken != null) {
+                        Log.e(TAG, "✅ API token received from backend!")
+                        Log.e(TAG, "API token length: ${result.apiToken.length}")
+                        Log.e(TAG, "API token: ${if (result.apiToken.length > 12) result.apiToken.take(12) + "..." else result.apiToken}")
+
                         prefsManager.setDeviceId(serialNumber)
                         prefsManager.setApiToken(result.apiToken)
                         prefsManager.setRegistered(true)
-                        Log.d(TAG, "DPC registration successful! Token saved.")
+                        Log.e(TAG, "✅ Device ID and API token saved to preferences!")
+                        Log.e(TAG, "✅ Registration flag set to true!")
 
                         // Send immediate heartbeat
-                        Log.d(TAG, "Sending immediate heartbeat after DPC registration...")
+                        Log.e(TAG, "🚀 Sending immediate heartbeat after DPC registration...")
                         ApiClient(context).sendHeartbeat()
                     } else {
-                        Log.e(TAG, "DPC registration succeeded but no token in response")
+                        Log.e(TAG, "❌ DPC registration response missing success or apiToken!")
+                        Log.e(TAG, "result.success: ${result?.success}")
+                        Log.e(TAG, "result.apiToken: ${result?.apiToken}")
                     }
                 } else {
-                    Log.e(TAG, "DPC registration failed: ${response.body?.string()}")
+                    val errorBody = response.body?.string()
+                    Log.e(TAG, "❌ DPC registration failed with status ${response.code}")
+                    Log.e(TAG, "Error body: $errorBody")
                 }
             }
 
             override fun onFailure(call: Call, e: java.io.IOException) {
-                Log.e(TAG, "DPC registration failed with exception", e)
+                Log.e(TAG, "❌❌❌ DPC registration network failure!", e)
+                Log.e(TAG, "Exception: ${e.message}")
+                e.printStackTrace()
             }
         })
     }
