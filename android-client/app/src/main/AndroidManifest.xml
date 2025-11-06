@@ -1,43 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Basic permissions -->
+    <!-- Core permissions (trim to what you actually use) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-
-    <!-- Device Owner specific permissions -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <!-- Optional / only if truly needed -->
+    <!-- <uses-permission android:name="android.permission.READ_PHONE_STATE" /> -->
 
-    <!-- MANAGE_DEVICE_POLICY permissions (Android 13+, required for Device Owner mode detection) -->
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_CERTIFICATES" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_SYSTEM_UPDATE_INFO" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_ACCOUNT_MANAGEMENT" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_APPS_CONTROL" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_DISPLAY" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_INSTALL_UNKNOWN_SOURCES" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_AUTOFILL" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_LOCALE" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_LOCATION" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_LOCK_CREDENTIALS" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_MOBILE_NETWORK" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_MODIFY_USERS" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_PACKAGE_STATE" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_RESTRICT_PRIVATE_DNS" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_CAMERA_TOGGLE" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_SAFE_BOOT" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_QUERY_SYSTEM_UPDATES" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_SMS" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_TIME" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_VPN" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_WALLPAPER" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_WIFI" />
+    <!-- NOTE: Removed WRITE_SECURE_SETTINGS and all MANAGE_DEVICE_POLICY_* permissions:
+         they're signature/privileged and won't be granted to a DPC on Android 10. -->
 
     <application
         android:icon="@mipmap/ic_launcher"
@@ -46,6 +22,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.Light">
 
+        <!-- Launcher (optional) -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -55,6 +32,7 @@
             </intent-filter>
         </activity>
 
+        <!-- Device Admin receiver (BIND_DEVICE_ADMIN here is correct) -->
         <receiver
             android:name=".MdmDeviceAdminReceiver"
             android:permission="android.permission.BIND_DEVICE_ADMIN"
@@ -66,6 +44,7 @@
                 android:resource="@xml/device_admin" />
             <intent-filter>
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <!-- This broadcast is fired after provisioning completes (PO and DO) -->
                 <action android:name="android.app.action.PROFILE_PROVISIONING_COMPLETE" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.app.action.PROFILE_OWNER_CHANGED" />
@@ -73,29 +52,27 @@
             </intent-filter>
         </receiver>
 
-        <!-- Android 12+ provisioning mode selection (required for QR code provisioning) -->
+        <!-- Headless responder: tells Setup Wizard which mode to use -->
         <activity
             android:name=".ProvisioningModeActivity"
-            android:exported="true"
-            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.app.action.GET_PROVISIONING_MODE" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 
-        <!-- Android 12+ policy compliance (required for QR code provisioning) -->
+        <!-- Compliance screen: shown AFTER provisioning by Managed Provisioning -->
         <activity
             android:name=".PolicyComplianceActivity"
-            android:exported="true"
-            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.app.action.ADMIN_POLICY_COMPLIANCE" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 
-        <!-- Provisioning success handler (signals Device Owner capability to Android) -->
+        <!-- Optional: launched when provisioning fully completes -->
         <activity
             android:name=".ProvisioningSuccessActivity"
             android:exported="true">
@@ -105,6 +82,7 @@
             </intent-filter>
         </activity>
 
+        <!-- Your services/receivers -->
         <service
             android:name=".PollingService"
             android:enabled="true"
@@ -121,7 +99,5 @@
         <receiver
             android:name=".ApkInstaller$InstallReceiver"
             android:exported="false" />
-
     </application>
-
 </manifest>
