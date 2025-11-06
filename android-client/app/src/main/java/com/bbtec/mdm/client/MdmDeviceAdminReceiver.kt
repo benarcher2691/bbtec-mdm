@@ -1,7 +1,9 @@
 package com.bbtec.mdm.client
 
+import android.Manifest
 import android.app.admin.DeviceAdminReceiver
 import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -15,10 +17,24 @@ class MdmDeviceAdminReceiver : DeviceAdminReceiver() {
 
         // Check if we are Device Owner
         val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val adminComponent = ComponentName(context, MdmDeviceAdminReceiver::class.java)
         val isDeviceOwner = dpm.isDeviceOwnerApp(context.packageName)
         Log.d(TAG, "Is Device Owner: $isDeviceOwner")
 
-        if (!isDeviceOwner) {
+        if (isDeviceOwner) {
+            // Auto-grant READ_PHONE_STATE permission to access hardware serial number
+            try {
+                val grantState = dpm.setPermissionGrantState(
+                    adminComponent,
+                    context.packageName,
+                    Manifest.permission.READ_PHONE_STATE,
+                    DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
+                )
+                Log.d(TAG, "✅ Auto-granted READ_PHONE_STATE permission: $grantState")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to grant READ_PHONE_STATE permission", e)
+            }
+        } else {
             Log.w(TAG, "Not Device Owner - limited functionality")
         }
     }
