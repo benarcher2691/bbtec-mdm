@@ -655,14 +655,377 @@ TestDPC (Google's reference DPC) successfully achieves Device Owner and register
 
 ---
 
+## Update: November 6, 2025 - Root Cause Found & Fixed (v0.0.21)
+
+### Current Issue
+
+**Status:** 🔍 PARTIAL SUCCESS - Enrollment token extracted successfully, but device not appearing in web UI
+
+**Evidence from v0.0.21 Provisioning:**
+```
+E PolicyComplianceActivity: ✅ Admin extras found in PersistableBundle!
+E PolicyComplianceActivity: Server URL: https://bbtec-mdm.vercel.app
+E PolicyComplianceActivity: Enrollment token length: 36
+E PolicyComplianceActivity: Enrollment token: 5ae72777-044...
+E DeviceRegistration: Request JSON: {"enrollmentToken":"5ae72777-0449-44a6-47b5-812c4007cb1b","serialNumber":"cdfc758d1aa25303",...}
+E DeviceRegistration: Sending DPC registration request to: https://bbtec-mdm.vercel.app/api/dpc/register
+E DeviceRegistration: DPC registration failed: {"error":"Enrollment token already used"}
+```
+
+**Observations:**
+1. ✅ Enrollment token successfully extracted (36 characters)
+2. ✅ Registration request sent to backend with all required fields
+3. ✅ Backend marks token as "used" (proven by retry error)
+4. ❌ Device still does not appear in web UI device list
+5. ⚠️ Success/failure response logs missing (use `Log.d()` which is filtered on release builds)
+
+### Analysis
+
+#### Root Cause #1: PersistableBundle Type Mismatch (FIXED ✅)
+
+**Problem Identified (v0.0.18-v0.0.20):**
+
+Android passes `PROVISIONING_ADMIN_EXTRAS_BUNDLE` as a `PersistableBundle`, not a regular `Bundle`. The original code attempted to extract it using:
+
+```kotlin
+// ❌ This ALWAYS returned null:
+val adminExtras = intent.getBundleExtra(
+    DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE
+)
+```
+
+Even though the intent contained the key, `getBundleExtra()` could not deserialize a `PersistableBundle`, resulting in:
+- Intent extras showed key exists: ✅ `android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE`
+- Bundle warning during extraction: ⚠️ `W/Bundle: at PolicyComplianceActivity.onCreate`
+- Extraction result: ❌ `null`
+- Enrollment token length: ❌ `0` (empty string)
+
+**Evidence:**
+```
+11-06 19:48:17.545 E/PolicyComplianceActivity: Intent extras: android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE
+11-06 19:48:17.546 W/Bundle: at PolicyComplianceActivity.onCreate(PolicyComplianceActivity.kt:28)
+11-06 19:48:17.546 E/PolicyComplianceActivity: ❌ NO admin extras bundle in intent!
+11-06 19:48:17.552 E/PolicyComplianceActivity: Enrollment token length: 0
+```
+
+**Solution Implemented (v0.0.21):**
+
+Use `getParcelableExtra<PersistableBundle>()` to properly deserialize the bundle:
+
+```kotlin
+// ✅ This works:
+val persistableExtras = intent.getParcelableExtra<android.os.PersistableBundle>(
+    DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE
+)
+
+if (persistableExtras != null) {
+    val serverUrl = persistableExtras.getString("server_url")
+    val enrollmentToken = persistableExtras.getString("enrollment_token")
+
+    // Save to preferences
+    prefsManager.setServerUrl(serverUrl)
+    prefsManager.setEnrollmentToken(enrollmentToken)
+}
+```
+
+**Result:**
+```
+11-06 20:13:33.797 E/DeviceRegistration: Enrollment token length: 36
+11-06 20:13:33.797 E/DeviceRegistration: Enrollment token: 5ae72777-044...
+11-06 20:13:33.799 E/DeviceRegistration: Request JSON: {"enrollmentToken":"5ae72777-0449-44a6-47b5-812c4007cb1b",...}
+```
+
+✅ **Fix Confirmed Working** - Enrollment token is now successfully extracted and sent to backend.
+
+#### Root Cause #2: Backend Registration Status Unknown (INVESTIGATING 🔍)
+
+**Problem:**
+
+The enrollment token is marked as "used" by the backend (proven by "token already used" error on retry), which indicates the backend received and processed the registration request. However:
+
+1. ❌ Device does not appear in web UI device list
+2. ❓ Backend response (success/failure) is not visible in logs
+3. ❓ Unknown if device record was created in Convex database
+
+**Backend Flow Analysis (from `/src/app/api/dpc/register/route.ts`):**
+
+```typescript
+// 1. Validate enrollment token
+const tokenData = await convex.query(api.enrollmentTokens.getByToken, { token: enrollmentToken })
+
+// 2. Check if token is already used
+if (tokenData.used) {
+    return NextResponse.json({ error: 'Enrollment token already used' }, { status: 401 })
+}
+
+// 3. Register device in database
+const result = await convex.mutation(api.deviceClients.registerDevice, {
+    deviceId: serialNumber,
+    serialNumber,
+    androidId,
+    model,
+    manufacturer,
+    androidVersion,
+    isDeviceOwner: isDeviceOwner ?? true,
+    userId: tokenData.userId, // ⚠️ Assigns device to token creator
+})
+
+// 4. Mark token as used
+await convex.mutation(api.enrollmentTokens.markTokenUsed, {
+    token: enrollmentToken,
+    deviceId: serialNumber,
+})
+
+// 5. Return API token
+return NextResponse.json({
+    success: true,
+    deviceId: serialNumber,
+    apiToken: result.apiToken,
+    policyId: tokenData.policyId,
+})
+```
+
+**Key Observation:**
+
+The token is marked as "used" (step 4), which means:
+- ✅ Steps 1-2: Token validation passed
+- ✅ Step 3: Device registration mutation was called
+- ✅ Step 4: Token marked as used (THIS HAPPENED - proven by error)
+- ❓ Step 5: Unknown if response was returned
+
+**Possible Causes:**
+
+1. **Device Created but User Mismatch:**
+   - Device was assigned to `tokenData.userId` (the user who generated QR code)
+   - Web UI is querying devices for a different user (auth mismatch?)
+   - Device exists in Convex but not visible due to user filtering
+
+2. **Registration Mutation Failed Silently:**
+   - `api.deviceClients.registerDevice` threw an exception after token was marked used
+   - Device record was not created
+   - Error was not logged or returned
+
+3. **API Token Not Saved to Device:**
+   - Backend returned API token successfully
+   - Device received response but didn't save token (though logs show "Cannot send heartbeat: No API token")
+   - Issue: Success logs use `Log.d()` which are filtered on release builds
+
+**Missing Diagnostic Information:**
+
+```kotlin
+// Line 155-173 in DeviceRegistration.kt
+override fun onResponse(call: Call, response: Response) {
+    Log.d(TAG, "DPC registration response: ${response.code}")  // ⚠️ Log.d() - not visible!
+    if (response.isSuccessful) {
+        val body = response.body?.string()
+        Log.d(TAG, "DPC registration response body: $body")  // ⚠️ Log.d() - not visible!
+
+        val result = gson.fromJson(body, RegistrationResponse::class.java)
+
+        if (result.success && result.apiToken != null) {
+            prefsManager.setDeviceId(serialNumber)
+            prefsManager.setApiToken(result.apiToken)
+            prefsManager.setRegistered(true)
+            Log.d(TAG, "DPC registration successful! Token saved.")  // ⚠️ Log.d() - not visible!
+        }
+    } else {
+        Log.e(TAG, "DPC registration failed: ${response.body?.string()}")  // ✅ Log.e() - visible!
+    }
+}
+```
+
+We can see error responses (`Log.e()`) but not success responses (`Log.d()`), making it impossible to determine if the device received an API token.
+
+### Proposed Actions to Fix
+
+#### Action 1: Check Backend Logs (IMMEDIATE) 🔍
+
+**Objective:** Determine if device was actually created in the backend.
+
+**Steps:**
+
+1. **Check Vercel Deployment Logs:**
+   - Navigate to: Vercel Dashboard → Project → Logs
+   - Search for: `[DPC REGISTER]`
+   - Time range: Around **20:11:50 UTC** (provisioning time)
+   - Look for:
+     - `[DPC REGISTER] SUCCESS: Device registered` → Device was created ✅
+     - `[DPC REGISTER] ERROR` → Registration failed with error ❌
+
+2. **Check Convex Database:**
+   - Navigate to: Convex Dashboard → Data → `deviceClients` table
+   - Search for: `serialNumber: cdfc758d1aa25303`
+   - If found: Device exists but not showing in UI (user mismatch or query issue)
+   - If not found: Registration mutation failed
+
+**Expected Findings:**
+
+- **Scenario A:** Device exists in Convex → User authentication/query issue
+- **Scenario B:** Device does not exist → Registration mutation failed silently
+- **Scenario C:** Registration logged error → Specific backend validation failure
+
+#### Action 2: Add Error-Level Response Logging (v0.0.22) 🔧
+
+**Objective:** Make all registration response logs visible on release builds.
+
+**Implementation:**
+
+```kotlin
+// Change all Log.d() to Log.e() in DeviceRegistration.kt
+override fun onResponse(call: Call, response: Response) {
+    Log.e(TAG, "═══ REGISTRATION RESPONSE RECEIVED ═══")
+    Log.e(TAG, "Response code: ${response.code}")
+
+    if (response.isSuccessful) {
+        val body = response.body?.string()
+        Log.e(TAG, "✅ SUCCESS Response body: $body")
+
+        val result = gson.fromJson(body, RegistrationResponse::class.java)
+
+        if (result.success && result.apiToken != null) {
+            prefsManager.setDeviceId(serialNumber)
+            prefsManager.setApiToken(result.apiToken)
+            prefsManager.setRegistered(true)
+            Log.e(TAG, "✅✅✅ API token saved! Length: ${result.apiToken.length}")
+            Log.e(TAG, "✅✅✅ Device registration COMPLETE")
+
+            // Send immediate heartbeat
+            ApiClient(context).sendHeartbeat()
+        } else {
+            Log.e(TAG, "❌ Success response but missing apiToken")
+            Log.e(TAG, "Response success: ${result.success}, apiToken null: ${result.apiToken == null}")
+        }
+    } else {
+        val errorBody = response.body?.string()
+        Log.e(TAG, "❌❌❌ FAILED Response body: $errorBody")
+    }
+}
+
+override fun onFailure(call: Call, e: java.io.IOException) {
+    Log.e(TAG, "❌❌❌ NETWORK FAILURE: ${e.message}", e)
+}
+```
+
+**Deliverable:** v0.0.22 APK with complete visibility into registration response.
+
+#### Action 3: Verify User Authentication Flow 🔐
+
+**Objective:** Ensure devices are being assigned to and queried by the correct user.
+
+**Investigation:**
+
+1. **Check Token Creator:**
+   ```sql
+   -- In Convex Data Explorer
+   SELECT userId FROM enrollmentTokens WHERE token = '5ae72777-0449-44a6-47b5-812c4007cb1b'
+   ```
+
+2. **Check Device Assignment:**
+   ```sql
+   -- In Convex Data Explorer
+   SELECT userId, serialNumber FROM deviceClients WHERE serialNumber = 'cdfc758d1aa25303'
+   ```
+
+3. **Check Web UI User:**
+   - Verify logged-in user ID in browser dev tools
+   - Check if `listDevices` query filters by current user
+
+**Expected Finding:** Device was created but assigned to different userId than web UI is querying for.
+
+**Fix if Confirmed:** Update device query to use correct user authentication context.
+
+#### Action 4: Add Backend Error Handling 🛡️
+
+**Objective:** Ensure registration errors are properly caught and returned.
+
+**Implementation:**
+
+```typescript
+// In /src/app/api/dpc/register/route.ts
+try {
+    // Register device (creates new or updates existing)
+    console.log(`[DPC REGISTER] Registering device in database...`)
+    const result = await convex.mutation(api.deviceClients.registerDevice, {
+        deviceId: serialNumber,
+        serialNumber,
+        androidId,
+        model,
+        manufacturer,
+        androidVersion,
+        isDeviceOwner: isDeviceOwner ?? true,
+        userId: tokenData.userId,
+    })
+
+    console.log(`[DPC REGISTER] Device registered successfully:`, {
+        deviceId: result.deviceId,
+        hasApiToken: !!result.apiToken,
+    })
+
+    // ONLY mark token as used if registration succeeded
+    await convex.mutation(api.enrollmentTokens.markTokenUsed, {
+        token: enrollmentToken,
+        deviceId: serialNumber,
+    })
+
+    console.log(`[DPC REGISTER] Token marked as used`)
+
+} catch (error) {
+    console.error(`[DPC REGISTER] ERROR during registration:`, error)
+    // DO NOT mark token as used if registration failed
+    throw error // Re-throw to be caught by outer try/catch
+}
+```
+
+**Rationale:** Current code marks token as "used" even if device registration fails, preventing retry.
+
+### Recommended Next Steps
+
+**Priority 1 (Immediate):**
+1. ✅ Check Vercel logs for `[DPC REGISTER]` entries around 20:11:50
+2. ✅ Check Convex database for device with serialNumber `cdfc758d1aa25303`
+3. ✅ Determine if device exists but is not visible in UI
+
+**Priority 2 (If device not in database):**
+1. 🔧 Build v0.0.22 with error-level response logging
+2. 🔧 Update backend to only mark token as used after successful registration
+3. 🔧 Add retry logic for transient backend failures
+
+**Priority 3 (If device exists but not visible):**
+1. 🔐 Verify user authentication flow
+2. 🔐 Check if device query filters are correct
+3. 🔐 Fix user assignment or query logic
+
+### Technical Specifications
+
+**Current Environment:**
+- **Device:** Android 10 (HSG1416, Hannspree)
+- **Serial Number:** `cdfc758d1aa25303`
+- **DPC Version:** v0.0.21
+- **Enrollment Token:** `5ae72777-0449-44a6-47b5-812c4007cb1b`
+- **Device Owner:** ✅ Confirmed (User 0)
+- **First Install:** 2025-11-06 20:11:30
+- **Provisioning Time:** 2025-11-06 20:11:49
+
+**Key Files Modified:**
+- `v0.0.21`: PolicyComplianceActivity.kt (PersistableBundle fix)
+- `v0.0.22` (proposed): DeviceRegistration.kt (error-level response logging)
+
+**Git Commits:**
+- `106815f` - v0.0.21: PersistableBundle fix (WORKING ✅)
+- Next: v0.0.22 with enhanced response logging
+
+---
+
 ## Conclusion
 
-v0.0.18 represents a critical diagnostic release that will definitively answer whether the QR code enrollment token is reaching the device. The enhanced error-level logging, comprehensive exception handling, and visual markers ensure that all provisioning activity will be captured and visible.
+**Major Breakthrough:** The root cause of enrollment token extraction failure has been identified and fixed in v0.0.21. Android uses `PersistableBundle` instead of regular `Bundle` for provisioning extras, which required using `getParcelableExtra<PersistableBundle>()` instead of `getBundleExtra()`.
 
-**Next Step:** Upload v0.0.18 APK, generate fresh QR code, factory reset device, and perform fresh enrollment test with full logcat capture.
+**Current Status:** Enrollment token extraction is now working perfectly (36-character token successfully extracted and sent to backend). However, devices are not appearing in the web UI despite the backend marking tokens as "used", which indicates registration was at least partially processed.
+
+**Next Critical Step:** Check backend logs and Convex database to determine if devices are being created but not visible due to user authentication issues, or if the registration mutation is failing silently after the token is marked as used.
 
 ---
 
 **Report Prepared By:** Claude Code
-**Last Updated:** November 6, 2025
-**Document Version:** 1.0
+**Last Updated:** November 6, 2025 (20:15 UTC)
+**Document Version:** 2.0
