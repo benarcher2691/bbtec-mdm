@@ -129,7 +129,7 @@ export function QRCodeGenerator() {
   const handleGoToDevice = () => {
     // Navigate to device detail page
     if (enrolledDevice?.deviceId) {
-      router.push(`/management/devices?deviceId=${enrolledDevice.deviceId}`)
+      router.push(`/management/devices?device=${enrolledDevice.deviceId}`)
     } else {
       router.push('/management/devices')
     }
@@ -236,7 +236,7 @@ export function QRCodeGenerator() {
           </div>
           <Button onClick={handleGoToDevice} className="w-full md:w-auto">
             <ArrowRight className="mr-2 h-4 w-4" />
-            Go to Device Management
+            View Device Details
           </Button>
         </div>
       )}
