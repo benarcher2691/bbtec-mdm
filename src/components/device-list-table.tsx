@@ -33,7 +33,7 @@ export function DeviceListTable() {
     selectedDevice ? { deviceId: selectedDevice.deviceId } : "skip"
   )
   const pendingWipeCommand = commandHistory?.find(
-    cmd => cmd.commandType === "wipe" && cmd.status === "pending"
+    cmd => cmd.commandType === "wipe" && (cmd.status === "pending" || cmd.status === "executing")
   )
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -92,9 +92,14 @@ export function DeviceListTable() {
               <div className="flex items-start gap-3">
                 <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5" />
                 <div className="flex-1">
-                  <h3 className="font-semibold text-orange-900">Factory Reset Pending</h3>
+                  <h3 className="font-semibold text-orange-900">
+                    {pendingWipeCommand.status === "executing" ? "Factory Reset In Progress" : "Factory Reset Pending"}
+                  </h3>
                   <p className="text-sm text-orange-700 mt-1">
-                    A factory reset command has been sent to this device. The device will be wiped when it checks in (within {selectedDevice.pingInterval} minutes).
+                    {pendingWipeCommand.status === "executing"
+                      ? "The device received the factory reset command and is wiping now. It will not check in again after the wipe completes."
+                      : `A factory reset command has been sent to this device. The device will be wiped when it checks in (within ${selectedDevice.pingInterval} minutes).`
+                    }
                   </p>
                   <p className="text-xs text-orange-600 mt-2">
                     After the wipe completes, you can remove this device from the list using &quot;Remove from List&quot;.
