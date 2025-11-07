@@ -343,9 +343,12 @@ export function DeviceListTable() {
               {deleteWithWipe ? (
                 <>
                   This will send a <strong className="text-red-600">factory reset command</strong> to{' '}
-                  <strong>{deviceToDelete?.name}</strong> and remove it from management.
+                  <strong>{deviceToDelete?.name}</strong>.
                   <br /><br />
                   <strong>All data on the device will be permanently erased.</strong>
+                  <br /><br />
+                  The device will receive this command on its next check-in (within {selectedDevice?.pingInterval || 15} minutes).
+                  After the wipe completes, you can remove it from the list manually.
                   <br /><br />
                   This action cannot be undone.
                 </>

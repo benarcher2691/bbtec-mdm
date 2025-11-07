@@ -304,7 +304,8 @@ export const getBySerialNumber = query({
 
 /**
  * Delete a device (NEW)
- * If withWipe is true, sends a factory reset command before removing from database
+ * If withWipe is true, sends a factory reset command and keeps device for command delivery
+ * If withWipe is false, immediately removes from database
  */
 export const deleteDevice = mutation({
   args: {
@@ -325,8 +326,8 @@ export const deleteDevice = mutation({
       throw new Error("Device not found or unauthorized")
     }
 
-    // If wipe requested, create a wipe command before deleting
     if (args.withWipe) {
+      // Create wipe command - device will receive it on next check-in
       await ctx.db.insert("deviceCommands", {
         deviceId: args.deviceId,
         commandType: "wipe",
@@ -334,10 +335,16 @@ export const deleteDevice = mutation({
         status: "pending",
         createdAt: Date.now(),
       })
-    }
 
-    // Delete device from database
-    await ctx.db.delete(device._id)
+      // DON'T delete device yet - it needs to stay in DB to:
+      // 1. Authenticate on next check-in
+      // 2. Receive the wipe command
+      // After device is wiped, it will stop checking in.
+      // User can manually remove it from list later.
+    } else {
+      // Remove from list only - delete immediately
+      await ctx.db.delete(device._id)
+    }
   },
 })
 
