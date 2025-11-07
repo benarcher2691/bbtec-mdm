@@ -97,10 +97,39 @@ class PollingService : Service() {
                 apiClient.getCommands { commands ->
                     Log.d(TAG, "Got ${commands?.size ?: 0} commands")
                     commands?.forEach { command ->
+                        Log.d(TAG, "Processing command: ${command.action} (ID: ${command.commandId})")
                         when (command.action) {
                             "install_apk" -> {
-                                ApkInstaller(this@PollingService)
-                                    .installApk(command.apkUrl, command.packageName, command.commandId)
+                                command.apkUrl?.let { apkUrl ->
+                                    command.packageName?.let { packageName ->
+                                        ApkInstaller(this@PollingService)
+                                            .installApk(apkUrl, packageName, command.commandId)
+                                    }
+                                }
+                            }
+                            "wipe" -> {
+                                Log.w(TAG, "WIPE command received - executing factory reset")
+                                apiClient.reportCommandStatus(command.commandId, "executing", null)
+                                val policyManager = PolicyManager(this@PollingService)
+                                policyManager.wipeDevice()
+                                // Note: Device will wipe immediately, no need to report completion
+                            }
+                            "lock" -> {
+                                Log.d(TAG, "LOCK command received - locking device")
+                                apiClient.reportCommandStatus(command.commandId, "executing", null)
+                                val policyManager = PolicyManager(this@PollingService)
+                                policyManager.lockDevice()
+                                apiClient.reportCommandStatus(command.commandId, "completed", null)
+                            }
+                            "reboot" -> {
+                                Log.d(TAG, "REBOOT command received - rebooting device")
+                                apiClient.reportCommandStatus(command.commandId, "executing", null)
+                                val policyManager = PolicyManager(this@PollingService)
+                                policyManager.rebootDevice()
+                                // Device will reboot immediately, no need to report completion
+                            }
+                            else -> {
+                                Log.w(TAG, "Unknown command action: ${command.action}")
                             }
                         }
                     }

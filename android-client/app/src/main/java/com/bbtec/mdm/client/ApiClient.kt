@@ -116,8 +116,9 @@ class ApiClient(private val context: Context) {
     data class Command(
         val commandId: String,
         val action: String,
-        val apkUrl: String,
-        val packageName: String
+        val apkUrl: String? = null,
+        val packageName: String? = null,
+        val parameters: Map<String, Any>? = null
     )
 
     data class CommandsResponse(
