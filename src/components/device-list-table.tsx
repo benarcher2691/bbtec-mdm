@@ -347,7 +347,7 @@ export function DeviceListTable() {
             </p>
           </div>
           <Button asChild>
-            <a href="/enrollment/enroll-device">Generate QR Code</a>
+            <a href="/enrollment/enroll-device">Enroll device</a>
           </Button>
         </div>
       </div>
