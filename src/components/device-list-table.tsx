@@ -44,7 +44,10 @@ export function DeviceListTable() {
     setError(null)
 
     try {
-      await deleteDeviceMutation({ deviceId: deviceToDelete.id })
+      await deleteDeviceMutation({
+        deviceId: deviceToDelete.id,
+        withWipe: deleteWithWipe,
+      })
       setDeleteDialogOpen(false)
       setDeviceToDelete(null)
 

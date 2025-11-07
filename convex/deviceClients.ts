@@ -276,9 +276,13 @@ export const getBySerialNumber = query({
 
 /**
  * Delete a device (NEW)
+ * If withWipe is true, sends a factory reset command before removing from database
  */
 export const deleteDevice = mutation({
-  args: { deviceId: v.string() },
+  args: {
+    deviceId: v.string(),
+    withWipe: v.optional(v.boolean()),
+  },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error("Unauthenticated")
@@ -293,6 +297,18 @@ export const deleteDevice = mutation({
       throw new Error("Device not found or unauthorized")
     }
 
+    // If wipe requested, create a wipe command before deleting
+    if (args.withWipe) {
+      await ctx.db.insert("deviceCommands", {
+        deviceId: args.deviceId,
+        commandType: "wipe",
+        parameters: undefined,
+        status: "pending",
+        createdAt: Date.now(),
+      })
+    }
+
+    // Delete device from database
     await ctx.db.delete(device._id)
   },
 })
