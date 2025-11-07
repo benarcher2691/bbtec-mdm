@@ -1,11 +1,36 @@
 # BBTec MDM - Roadmap & Next Steps
 
-**Date:** 2024-11-06
-**Current Status:** ✅ Device enrollment working, hardware serial number properly captured
+**Last Updated:** 2025-11-07
+**Current Status:** ✅ Device commands working, ping interval sync implemented, wipe command tested successfully
 
-## Today's Achievement
+## Recent Achievements
 
-**Fixed Hardware Serial Number Access (v0.0.24)**
+### 2025-11-07: Ping Interval & Device Commands (v0.0.27)
+
+**✅ Bidirectional Ping Interval Configuration**
+- Feature: Set ping interval (1-180 minutes) from both web dashboard AND Android client
+- Implementation:
+  - Web → Device: Updates automatically on next heartbeat
+  - Device → Web: Real-time reactive updates using Convex
+- API: New `/api/client/ping-interval` endpoint with device auth
+- Mutation: `updatePingIntervalFromDevice` (no user auth, uses API token)
+- UI: Inline editor with validation in web dashboard, settings section in Android client
+- Result: ✅ Fully bidirectional, real-time synchronized
+
+**✅ Device Wipe Command - End-to-End Testing**
+- Tested complete wipe flow with 3-minute ping interval
+- Device successfully received and executed factory reset via pull-based polling
+- Timing: ~21 seconds from web button click to device wipe (fortunate poll timing)
+- Confirmed: Pull-based architecture works correctly, devices poll at configured intervals
+- Commands processed: wipe, lock, reboot (all implemented in Android client)
+
+**⚠️ Known Issues Discovered:**
+- **Serial Number Display Bug:** Serial number no longer displayed in Device Management page (regression from 2025-11-06 commit) - currently shows Android ID instead
+- **Wipe Status Not Updating:** After successful device wipe, web dashboard still shows "Factory reset pending" - needs status update logic when device goes offline permanently
+
+### 2025-11-06: Hardware Serial Number Access (v0.0.24)
+
+**✅ Fixed Hardware Serial Number Access**
 - Problem: Both Serial Number and Android ID showed identical values (Android ID)
 - Root Cause: `READ_PHONE_STATE` runtime permission not granted on Android 10+
 - Solution: Auto-grant permission using `DevicePolicyManager.setPermissionGrantState()` in `MdmDeviceAdminReceiver.onEnabled()`
@@ -13,16 +38,25 @@
 
 ## Roadmap - Priority Order
 
-### 1. Device Management Commands 🎯 **[HIGHEST PRIORITY - START HERE]**
+### 1. Device Management Commands 🎯 **[MOSTLY COMPLETE]**
 
-**Status:** Backend infrastructure exists (deviceCommands table), UI has wipe button, but Android client doesn't handle commands yet.
+**Status:** ✅ Core functionality working! Commands execute successfully, but status tracking needs refinement.
 
-**What to Build:**
-- [ ] Android client: Poll for commands from backend
-- [ ] Android client: Execute wipe command using `DevicePolicyManager.wipeData()`
-- [ ] Android client: Report command execution status back to backend
-- [ ] Web UI: Show command execution status (pending/success/failed)
-- [ ] Add more commands: lock device, reboot, clear passcode
+**What's Working:**
+- [x] Android client: Poll for commands from backend (via `ApiClient.getCommands()`)
+- [x] Android client: Execute wipe command using `DevicePolicyManager.wipeData()`
+- [x] Android client: Execute lock command using `DevicePolicyManager.lockNow()`
+- [x] Android client: Execute reboot command using `DevicePolicyManager.reboot()`
+- [x] Android client: Report command execution status back to backend
+- [x] Web UI: Show command execution status (pending)
+- [x] Sync button in Android client for immediate command check
+
+**What Needs Work:**
+- [ ] Fix serial number display in Device Management page (regression)
+- [ ] Web UI: Auto-update when device wipes (device goes offline permanently)
+- [ ] Web UI: Better handling of completed/failed command states
+- [ ] Add more commands: clear passcode, set kiosk mode, configure WiFi
+- [ ] Command history/audit trail in web UI
 
 **Technical Details:**
 - Backend already has `deviceCommands` table in Convex
@@ -45,7 +79,59 @@
 
 ---
 
-### 2. App Deployment 📱
+### 2. Security Audit 🔒 **[HIGH PRIORITY - BEFORE PRODUCTION]**
+
+**Status:** ⚠️ Not yet audited - critical before any production use
+
+**What to Audit:**
+- [ ] **API Endpoints:** Review all `/api/*` routes for proper authentication and authorization
+  - Check device authentication (API token validation)
+  - Check user authentication (Clerk session validation)
+  - Verify input validation and rate limiting
+  - Review error messages (don't leak sensitive info)
+
+- [ ] **Convex Functions:** Review all queries/mutations for proper protection
+  - Verify all functions call `ctx.auth.getUserIdentity()` for user auth
+  - Check device-scoped operations filter by deviceId/userId
+  - Verify no functions leak data across user boundaries
+  - Review all functions that accept IDs (prevent unauthorized access)
+
+- [ ] **Device API Endpoints (No User Auth):**
+  - `/api/client/heartbeat` - Device token auth only ✅
+  - `/api/client/ping-interval` - Device token auth only ✅
+  - `/api/client/commands` - Device token auth only (needs verification)
+  - `/api/dpc/register` - Enrollment token auth (needs verification)
+
+- [ ] **Web Dashboard Endpoints (User Auth Required):**
+  - All Convex queries/mutations called from web UI
+  - Device management operations (wipe, lock, reboot)
+  - Policy management operations
+  - Company user management operations
+  - Enrollment token generation
+
+**Files to Audit:**
+- `src/app/api/client/*` - Device API routes
+- `src/app/api/dpc/*` - Enrollment API routes
+- `src/lib/auth-device.ts` - Device authentication logic
+- `convex/deviceClients.ts` - Device management functions
+- `convex/deviceCommands.ts` - Command management functions
+- `convex/policies.ts` - Policy management functions
+- `convex/companyUsers.ts` - Company user functions
+- `convex/enrollmentTokens.ts` - Token management functions
+
+**Security Principles:**
+1. Never trust client input - always validate
+2. All Convex functions must check auth unless explicitly public
+3. Device operations must verify device ownership
+4. User operations must verify user ownership
+5. Enrollment tokens must be single-use and expire
+6. API tokens must be stored securely (not logged)
+7. Rate limit all write operations
+8. Audit log all administrative actions
+
+---
+
+### 3. App Deployment 📱
 
 **Status:** Web UI can upload APKs to Convex storage, but devices can't receive/install them yet.
 
@@ -70,7 +156,7 @@
 
 ---
 
-### 3. Policy Enforcement 🔒
+### 4. Policy Enforcement 🔒
 
 **Status:** Policies can be created and assigned to devices, but Android client doesn't enforce them.
 
@@ -96,7 +182,7 @@
 
 ---
 
-### 4. Enhanced Device Info 📊
+### 5. Enhanced Device Info 📊
 
 **Status:** Currently only showing basic info (model, manufacturer, version, serial, Android ID)
 
@@ -122,7 +208,7 @@
 
 ---
 
-### 5. Backend Improvements 🛠️
+### 6. Backend Improvements 🛠️
 
 **Status:** Core functionality working, but technical review identified some issues
 
@@ -154,8 +240,9 @@
 **Android Client:**
 - Kotlin, Android 10+ (API 29+)
 - Device Owner mode (full device control)
-- Current version: v0.0.24
+- Current version: v0.0.27
 - Signature: `53:CD:0E:1A:9E:3F:3A:38:C6:66:84:2A:98:94:CA:8E:B1:ED:DC:DC:F4:FB:0E:13:10:B3:03:8F:A7:1B:CE:21`
+- Features: Device commands (wipe/lock/reboot), ping interval config, manual sync button
 
 **Enrollment Flow:**
 1. Admin generates QR code (includes enrollment token, APK download URL)
@@ -169,22 +256,27 @@
 
 ---
 
-## Decision: Start with Device Commands Tomorrow
+## Next Steps - Recommended Priority
 
-**Why:**
-1. Most visible feature (user already tried the wipe button)
-2. Backend infrastructure already exists
-3. Unlocks powerful device management capabilities
-4. Relatively straightforward implementation
-5. Can test end-to-end easily
+### Immediate (Bug Fixes)
+1. **Fix serial number display bug** in Device Management page (regression from 2025-11-06)
+2. **Fix wipe command status tracking** - web UI should detect when device goes offline after wipe
 
-**First Steps Tomorrow:**
-1. Review existing `deviceCommands` Convex schema
-2. Implement command polling in `ApiClient.kt`
-3. Create `CommandExecutor.kt` for executing commands
-4. Implement wipe command first (most critical)
-5. Add command status reporting back to backend
-6. Test with connected device
+### High Priority (Security)
+3. **Security audit** of all API endpoints and Convex functions (see section 2)
+4. **Implement rate limiting** on device registration and command endpoints
+5. **Add audit logging** for administrative actions
+
+### Medium Priority (Features)
+6. **App deployment system** - Silent APK installation on managed devices
+7. **Policy enforcement** - Apply device restrictions from web dashboard
+8. **Enhanced device info** - Battery, storage, network, installed apps
+9. **Command history UI** - Show audit trail of all commands sent to devices
+
+### Lower Priority (Polish)
+10. **Error handling improvements** - Better error messages throughout
+11. **Dashboard improvements** - Better real-time status indicators
+12. **Documentation** - API documentation, deployment guide, user manual
 
 ---
 
