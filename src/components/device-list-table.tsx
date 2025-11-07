@@ -15,19 +15,44 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Smartphone, RefreshCw, AlertCircle, Trash2, Clock, Check, X } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Smartphone, RefreshCw, AlertCircle, Trash2, Clock, Check, X, Download, Package } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { useSearchParams, useRouter } from "next/navigation"
+import type { Id } from "../../convex/_generated/dataModel"
 
 export function DeviceListTable() {
-  const devices = useQuery(api.deviceClients.listDevices)
-  const deleteDeviceMutation = useMutation(api.deviceClients.deleteDevice)
-  const updatePingIntervalMutation = useMutation(api.deviceClients.updatePingInterval)
   const searchParams = useSearchParams()
   const router = useRouter()
 
   const deviceId = searchParams.get('device')
+
+  // State for Install App dialog
+  const [installDialogOpen, setInstallDialogOpen] = useState(false)
+  const [selectedApp, setSelectedApp] = useState<Id<"applications"> | null>(null)
+  const [installing, setInstalling] = useState(false)
+  const [installError, setInstallError] = useState<string | null>(null)
+  const [installSuccess, setInstallSuccess] = useState(false)
+
+  // Queries and mutations
+  const devices = useQuery(api.deviceClients.listDevices)
+  const applications = useQuery(api.applications.listApplications)
   const selectedDevice = devices?.find(d => d.deviceId === deviceId) || null
+  const deleteDeviceMutation = useMutation(api.deviceClients.deleteDevice)
+  const updatePingIntervalMutation = useMutation(api.deviceClients.updatePingInterval)
+  const createInstallCommand = useMutation(api.installCommands.create)
+  const getDownloadUrl = useQuery(api.applications.getDownloadUrl,
+    selectedApp && applications
+      ? { storageId: applications.find(a => a._id === selectedApp)?.storageId ?? ("" as Id<"_storage">) }
+      : "skip"
+  )
 
   // Auto-navigate back to device list when selected device is deleted
   // This happens when wipe command completes and device is auto-removed
@@ -136,6 +161,36 @@ export function DeviceListTable() {
       setPingIntervalError(err instanceof Error ? err.message : "Failed to update ping interval")
     } finally {
       setSavingPingInterval(false)
+    }
+  }
+
+  const handleInstallApp = async () => {
+    if (!selectedApp || !selectedDevice || !getDownloadUrl) return
+
+    setInstalling(true)
+    setInstallError(null)
+
+    try {
+      const app = applications?.find(a => a._id === selectedApp)
+      if (!app) throw new Error("Application not found")
+
+      await createInstallCommand({
+        deviceId: selectedDevice.deviceId,
+        apkUrl: getDownloadUrl,
+        packageName: app.packageName,
+        appName: app.name,
+      })
+
+      setInstallSuccess(true)
+      setTimeout(() => {
+        setInstallDialogOpen(false)
+        setSelectedApp(null)
+        setInstallSuccess(false)
+      }, 3000)
+    } catch (err) {
+      setInstallError(err instanceof Error ? err.message : "Failed to queue installation")
+    } finally {
+      setInstalling(false)
     }
   }
 
@@ -299,6 +354,12 @@ export function DeviceListTable() {
           </div>
 
           <div className="mt-6 pt-6 border-t flex gap-2">
+            <Button
+              onClick={() => setInstallDialogOpen(true)}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Install App
+            </Button>
             <Button
               variant="destructive"
               onClick={() => handleDeleteClick(selectedDevice, true)}
@@ -475,6 +536,103 @@ export function DeviceListTable() {
       </div>
         </div>
       )}
+
+      {/* Install App Dialog */}
+      <Dialog open={installDialogOpen} onOpenChange={setInstallDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Install Application</DialogTitle>
+            <DialogDescription>
+              Select an application to install on this device
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {applications === undefined ? (
+              <div className="flex items-center justify-center p-8">
+                <div className="h-6 w-6 animate-spin rounded-full border-4 border-solid border-current border-r-transparent" />
+              </div>
+            ) : applications.length === 0 ? (
+              <div className="text-center p-8">
+                <Package className="h-12 w-12 text-slate-400 mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground">
+                  No applications uploaded yet. Upload an APK from the Applications page.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {applications.map((app) => (
+                  <div
+                    key={app._id}
+                    className={`rounded-lg border p-4 cursor-pointer transition-colors ${
+                      selectedApp === app._id
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'hover:bg-slate-50'
+                    }`}
+                    onClick={() => setSelectedApp(app._id)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-lg bg-blue-100 p-2">
+                        <Package className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium">{app.name}</p>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {app.packageName}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          v{app.versionName} ({app.versionCode})
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {installSuccess && (
+              <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                <div className="flex items-start gap-3">
+                  <Check className="h-5 w-5 text-green-600 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm text-green-700 font-medium mb-2">
+                      Installation queued successfully!
+                    </p>
+                    <p className="text-sm text-green-700">
+                      The app will install silently when the device checks in (within {selectedDevice?.pingInterval || 15} minutes).
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {installError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                  <p className="text-sm text-red-700">{installError}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setInstallDialogOpen(false)}
+              disabled={installing}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleInstallApp}
+              disabled={!selectedApp || installing || installSuccess}
+            >
+              {installing ? 'Installing...' : 'Install'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

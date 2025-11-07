@@ -37,6 +37,7 @@ const navigationSections: NavSection[] = [
     title: "Management",
     items: [
       { title: "Devices", href: "/management/devices", icon: Smartphone },
+      { title: "Applications", href: "/management/applications", icon: Package },
       { title: "Configuration profiles", href: "/management/configuration-profiles", icon: Settings },
       { title: "Action log", href: "/management/action-log", icon: ScrollText },
     ],
