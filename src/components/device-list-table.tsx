@@ -14,14 +14,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Smartphone, RefreshCw, AlertCircle, Trash2, ArrowLeft } from "lucide-react"
+import { Smartphone, RefreshCw, AlertCircle, Trash2 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
+import { useSearchParams, useRouter } from "next/navigation"
 
 export function DeviceListTable() {
   const devices = useQuery(api.deviceClients.listDevices)
   const deleteDeviceMutation = useMutation(api.deviceClients.deleteDevice)
+  const searchParams = useSearchParams()
+  const router = useRouter()
 
-  const [selectedDevice, setSelectedDevice] = useState<any | null>(null)
+  const deviceId = searchParams.get('device')
+  const selectedDevice = devices?.find(d => d.deviceId === deviceId) || null
+
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deviceToDelete, setDeviceToDelete] = useState<{ id: string; name: string } | null>(null)
   const [deleteWithWipe, setDeleteWithWipe] = useState(false)
@@ -53,7 +58,7 @@ export function DeviceListTable() {
 
       // Close detail view if deleted device was selected
       if (selectedDevice?.deviceId === deviceToDelete.id) {
-        setSelectedDevice(null)
+        router.push('/management/devices')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete device')
@@ -63,23 +68,15 @@ export function DeviceListTable() {
   }
 
   const handleDeviceDoubleClick = (device: any) => {
-    setSelectedDevice(device)
+    router.push(`/management/devices?device=${device.deviceId}`)
   }
 
-  const handleBackToList = () => {
-    setSelectedDevice(null)
-  }
-
-  // Show device detail view if selected
-  if (selectedDevice) {
-    return (
-      <div className="space-y-4">
-        <Button variant="outline" onClick={handleBackToList}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to List
-        </Button>
-
-        <div className="rounded-lg border bg-card p-6">
+  return (
+    <>
+      {/* Device detail view */}
+      {selectedDevice && (
+        <div className="space-y-4">
+          <div className="rounded-lg border bg-card p-6">
           <h2 className="text-2xl font-bold mb-6">
             {selectedDevice.manufacturer} {selectedDevice.model}
           </h2>
@@ -176,23 +173,21 @@ export function DeviceListTable() {
             </Button>
           </div>
         </div>
-      </div>
-    )
-  }
-
-  if (devices === undefined) {
-    return (
-      <div className="rounded-lg border bg-card p-12">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent" />
-          <p className="text-sm text-muted-foreground">Loading devices...</p>
         </div>
-      </div>
-    )
-  }
+      )}
 
-  if (error) {
-    return (
+      {/* Loading state */}
+      {!selectedDevice && devices === undefined && (
+        <div className="rounded-lg border bg-card p-12">
+          <div className="flex flex-col items-center gap-4">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent" />
+            <p className="text-sm text-muted-foreground">Loading devices...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Error state */}
+      {!selectedDevice && error && (
       <div className="rounded-lg border border-red-200 bg-red-50 p-6">
         <div className="flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
@@ -202,11 +197,10 @@ export function DeviceListTable() {
           </div>
         </div>
       </div>
-    )
-  }
+      )}
 
-  if (devices.length === 0) {
-    return (
+      {/* Empty state */}
+      {!selectedDevice && devices && devices.length === 0 && (
       <div className="rounded-lg border bg-card p-12">
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="rounded-full bg-slate-100 p-4">
@@ -223,11 +217,11 @@ export function DeviceListTable() {
           </Button>
         </div>
       </div>
-    )
-  }
+      )}
 
-  return (
-    <div className="space-y-4">
+      {/* Device list */}
+      {!selectedDevice && devices && devices.length > 0 && (
+        <div className="space-y-4">
       {/* Header */}
       <div className="flex justify-between items-center">
         <p className="text-sm text-muted-foreground">
@@ -335,6 +329,8 @@ export function DeviceListTable() {
           </table>
         </div>
       </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -375,6 +371,6 @@ export function DeviceListTable() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   )
 }
