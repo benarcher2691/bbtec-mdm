@@ -30,6 +30,22 @@ class ProvisioningSuccessActivity : Activity() {
 
         if (isDeviceOwner) {
             Log.d(TAG, "✅ Device Owner mode confirmed!")
+
+            // IMPORTANT: Grant READ_PHONE_STATE permission NOW, before device registration
+            // This ensures Build.getSerial() works during registration (ProvisioningSuccessActivity:56)
+            // On Android 8.0+, registration happens HERE, not in onEnabled()
+            try {
+                val adminComponent = android.content.ComponentName(this, MdmDeviceAdminReceiver::class.java)
+                val grantState = dpm.setPermissionGrantState(
+                    adminComponent,
+                    packageName,
+                    android.Manifest.permission.READ_PHONE_STATE,
+                    DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
+                )
+                Log.d(TAG, "✅ Granted READ_PHONE_STATE before registration: $grantState")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to grant READ_PHONE_STATE permission", e)
+            }
         } else {
             Log.w(TAG, "⚠️ Not Device Owner - may be Profile Owner instead")
         }

@@ -85,16 +85,19 @@ class ApkInstaller(private val context: Context) {
             val commandId = intent.getStringExtra("commandId") ?: return
             val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -1)
 
-            val apiClient = ApiClient(context)
-            when (status) {
-                PackageInstaller.STATUS_SUCCESS -> {
-                    apiClient.reportCommandStatus(commandId, "completed", null)
+            // Move network call to background thread
+            Thread {
+                val apiClient = ApiClient(context)
+                when (status) {
+                    PackageInstaller.STATUS_SUCCESS -> {
+                        apiClient.reportCommandStatus(commandId, "completed", null)
+                    }
+                    else -> {
+                        val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+                        apiClient.reportCommandStatus(commandId, "failed", message)
+                    }
                 }
-                else -> {
-                    val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
-                    apiClient.reportCommandStatus(commandId, "failed", message)
-                }
-            }
+            }.start()
         }
     }
 }
