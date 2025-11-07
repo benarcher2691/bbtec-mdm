@@ -27,6 +27,15 @@ export function DeviceListTable() {
   const deviceId = searchParams.get('device')
   const selectedDevice = devices?.find(d => d.deviceId === deviceId) || null
 
+  // Get pending commands for selected device
+  const commandHistory = useQuery(
+    api.deviceCommands.getCommandHistory,
+    selectedDevice ? { deviceId: selectedDevice.deviceId } : "skip"
+  )
+  const pendingWipeCommand = commandHistory?.find(
+    cmd => cmd.commandType === "wipe" && cmd.status === "pending"
+  )
+
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deviceToDelete, setDeviceToDelete] = useState<{ id: string; name: string } | null>(null)
   const [deleteWithWipe, setDeleteWithWipe] = useState(false)
@@ -56,8 +65,9 @@ export function DeviceListTable() {
       setDeleteDialogOpen(false)
       setDeviceToDelete(null)
 
-      // Close detail view if deleted device was selected
-      if (selectedDevice?.deviceId === deviceToDelete.id) {
+      // Only navigate away if device was actually deleted (not wiped)
+      // When wiping, device stays in DB to receive the command
+      if (!deleteWithWipe && selectedDevice?.deviceId === deviceToDelete.id) {
         router.push('/management/devices')
       }
     } catch (err) {
@@ -76,6 +86,24 @@ export function DeviceListTable() {
       {/* Device detail view */}
       {selectedDevice && (
         <div className="space-y-4">
+          {/* Pending Wipe Warning */}
+          {pendingWipeCommand && (
+            <div className="rounded-lg border border-orange-200 bg-orange-50 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5" />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-orange-900">Factory Reset Pending</h3>
+                  <p className="text-sm text-orange-700 mt-1">
+                    A factory reset command has been sent to this device. The device will be wiped when it checks in (within {selectedDevice.pingInterval} minutes).
+                  </p>
+                  <p className="text-xs text-orange-600 mt-2">
+                    After the wipe completes, you can remove this device from the list using "Remove from List".
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-lg border bg-card p-6">
           <h2 className="text-2xl font-bold mb-6">
             {selectedDevice.manufacturer} {selectedDevice.model}
@@ -160,9 +188,11 @@ export function DeviceListTable() {
             <Button
               variant="destructive"
               onClick={() => handleDeleteClick(selectedDevice, true)}
+              disabled={!!pendingWipeCommand}
+              title={pendingWipeCommand ? "Factory reset already pending" : "Send factory reset command to device"}
             >
               <Trash2 className="mr-2 h-4 w-4" />
-              Wipe Device
+              {pendingWipeCommand ? 'Wipe Pending' : 'Wipe Device'}
             </Button>
             <Button
               variant="outline"
