@@ -180,7 +180,7 @@ export const getByAndroidDeviceId = query({
 })
 
 /**
- * Update ping interval for a device
+ * Update ping interval for a device (web dashboard / user-initiated)
  */
 export const updatePingInterval = mutation({
   args: {
@@ -193,6 +193,40 @@ export const updatePingInterval = mutation({
     if (!identity) {
       throw new Error("Unauthorized")
     }
+
+    // Validate interval is between 1 and 180 minutes
+    if (args.pingInterval < 1 || args.pingInterval > 180) {
+      throw new Error("Ping interval must be between 1 and 180 minutes")
+    }
+
+    const device = await ctx.db
+      .query("deviceClients")
+      .withIndex("by_device", (q) => q.eq("deviceId", args.deviceId))
+      .first()
+
+    if (!device) {
+      throw new Error("Device not found")
+    }
+
+    await ctx.db.patch(device._id, {
+      pingInterval: args.pingInterval,
+    })
+
+    return { success: true }
+  },
+})
+
+/**
+ * Update ping interval for a device (device-initiated via API)
+ * No user auth required - device already authenticated via API token
+ */
+export const updatePingIntervalFromDevice = mutation({
+  args: {
+    deviceId: v.string(),
+    pingInterval: v.number(),
+  },
+  handler: async (ctx, args) => {
+    // No user auth check - called from API route that already validated device token
 
     // Validate interval is between 1 and 180 minutes
     if (args.pingInterval < 1 || args.pingInterval > 180) {

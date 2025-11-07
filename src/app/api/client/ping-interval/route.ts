@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    await convex.mutation(api.deviceClients.updatePingInterval, {
+    await convex.mutation(api.deviceClients.updatePingIntervalFromDevice, {
       deviceId: auth.device.deviceId,
       pingInterval,
     })
