@@ -97,7 +97,7 @@ export function DeviceListTable() {
                     A factory reset command has been sent to this device. The device will be wiped when it checks in (within {selectedDevice.pingInterval} minutes).
                   </p>
                   <p className="text-xs text-orange-600 mt-2">
-                    After the wipe completes, you can remove this device from the list using "Remove from List".
+                    After the wipe completes, you can remove this device from the list using &quot;Remove from List&quot;.
                   </p>
                 </div>
               </div>
