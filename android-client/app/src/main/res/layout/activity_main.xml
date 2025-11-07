@@ -39,6 +39,65 @@
         android:textSize="12sp"
         android:textColor="#888888" />
 
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Settings"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Check-in interval:"
+            android:textSize="14sp"
+            android:layout_marginEnd="8dp" />
+
+        <EditText
+            android:id="@+id/pingIntervalInput"
+            android:layout_width="60dp"
+            android:layout_height="wrap_content"
+            android:inputType="number"
+            android:hint="15"
+            android:textSize="14sp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="minutes"
+            android:textSize="14sp"
+            android:layout_marginStart="8dp" />
+
+        <Button
+            android:id="@+id/savePingIntervalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Save"
+            android:textAllCaps="false"
+            android:layout_marginStart="12dp"
+            style="@style/Widget.Material3.Button.TonalButton" />
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/pingIntervalStatusText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text=""
+        android:textSize="12sp"
+        android:textColor="#666666" />
+
     <Button
         android:id="@+id/syncButton"
         android:layout_width="wrap_content"

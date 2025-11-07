@@ -113,6 +113,48 @@ class ApiClient(private val context: Context) {
         client.newCall(request).execute()
     }
 
+    fun updatePingInterval(pingInterval: Int, callback: (Boolean) -> Unit) {
+        val apiToken = prefsManager.getApiToken()
+
+        if (apiToken.isEmpty()) {
+            Log.e("ApiClient", "Cannot update ping interval: No API token")
+            callback(false)
+            return
+        }
+
+        if (pingInterval < 1 || pingInterval > 180) {
+            Log.e("ApiClient", "Invalid ping interval: $pingInterval (must be 1-180)")
+            callback(false)
+            return
+        }
+
+        val json = gson.toJson(mapOf("pingInterval" to pingInterval))
+
+        val request = Request.Builder()
+            .url("$baseUrl/ping-interval")
+            .header("Authorization", "Bearer $apiToken")
+            .post(json.toRequestBody("application/json".toMediaType()))
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onResponse(call: Call, response: Response) {
+                if (response.isSuccessful) {
+                    prefsManager.setPingInterval(pingInterval)
+                    Log.d("ApiClient", "Ping interval updated to $pingInterval minutes")
+                    callback(true)
+                } else {
+                    Log.e("ApiClient", "Failed to update ping interval: ${response.code}")
+                    callback(false)
+                }
+            }
+
+            override fun onFailure(call: Call, e: java.io.IOException) {
+                Log.e("ApiClient", "Update ping interval failed", e)
+                callback(false)
+            }
+        })
+    }
+
     data class Command(
         val commandId: String,
         val action: String,

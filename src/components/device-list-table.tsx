@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useQuery, useMutation } from "convex/react"
 import { api } from "../../convex/_generated/api"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,13 +15,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Smartphone, RefreshCw, AlertCircle, Trash2 } from "lucide-react"
+import { Smartphone, RefreshCw, AlertCircle, Trash2, Clock, Check, X } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { useSearchParams, useRouter } from "next/navigation"
 
 export function DeviceListTable() {
   const devices = useQuery(api.deviceClients.listDevices)
   const deleteDeviceMutation = useMutation(api.deviceClients.deleteDevice)
+  const updatePingIntervalMutation = useMutation(api.deviceClients.updatePingInterval)
   const searchParams = useSearchParams()
   const router = useRouter()
 
@@ -41,6 +43,11 @@ export function DeviceListTable() {
   const [deleteWithWipe, setDeleteWithWipe] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const [editingPingInterval, setEditingPingInterval] = useState(false)
+  const [pingIntervalValue, setPingIntervalValue] = useState("")
+  const [savingPingInterval, setSavingPingInterval] = useState(false)
+  const [pingIntervalError, setPingIntervalError] = useState<string | null>(null)
 
   const handleDeleteClick = (device: any, withWipe: boolean) => {
     setDeviceToDelete({
@@ -79,6 +86,47 @@ export function DeviceListTable() {
 
   const handleDeviceDoubleClick = (device: any) => {
     router.push(`/management/devices?device=${device.deviceId}`)
+  }
+
+  const handleEditPingInterval = () => {
+    if (selectedDevice) {
+      setPingIntervalValue(selectedDevice.pingInterval.toString())
+      setEditingPingInterval(true)
+      setPingIntervalError(null)
+    }
+  }
+
+  const handleCancelPingInterval = () => {
+    setEditingPingInterval(false)
+    setPingIntervalValue("")
+    setPingIntervalError(null)
+  }
+
+  const handleSavePingInterval = async () => {
+    if (!selectedDevice) return
+
+    const interval = parseInt(pingIntervalValue, 10)
+
+    if (isNaN(interval) || interval < 1 || interval > 180) {
+      setPingIntervalError("Ping interval must be between 1 and 180 minutes")
+      return
+    }
+
+    setSavingPingInterval(true)
+    setPingIntervalError(null)
+
+    try {
+      await updatePingIntervalMutation({
+        deviceId: selectedDevice.deviceId,
+        pingInterval: interval,
+      })
+      setEditingPingInterval(false)
+      setPingIntervalValue("")
+    } catch (err) {
+      setPingIntervalError(err instanceof Error ? err.message : "Failed to update ping interval")
+    } finally {
+      setSavingPingInterval(false)
+    }
   }
 
   return (
@@ -183,7 +231,58 @@ export function DeviceListTable() {
                 </div>
                 <div>
                   <dt className="text-sm font-medium">Ping Interval</dt>
-                  <dd className="text-sm text-muted-foreground">{selectedDevice.pingInterval} minutes</dd>
+                  <dd className="text-sm">
+                    {editingPingInterval ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input
+                          type="number"
+                          min="1"
+                          max="180"
+                          value={pingIntervalValue}
+                          onChange={(e) => setPingIntervalValue(e.target.value)}
+                          className="w-20 h-8"
+                          disabled={savingPingInterval}
+                        />
+                        <span className="text-muted-foreground">minutes</span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          onClick={handleSavePingInterval}
+                          disabled={savingPingInterval}
+                          title="Save"
+                        >
+                          <Check className="h-4 w-4 text-green-600" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          onClick={handleCancelPingInterval}
+                          disabled={savingPingInterval}
+                          title="Cancel"
+                        >
+                          <X className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">{selectedDevice.pingInterval} minutes</span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          onClick={handleEditPingInterval}
+                          title="Edit ping interval"
+                        >
+                          <Clock className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                    {pingIntervalError && (
+                      <p className="text-xs text-red-600 mt-1">{pingIntervalError}</p>
+                    )}
+                  </dd>
                 </div>
               </dl>
             </div>

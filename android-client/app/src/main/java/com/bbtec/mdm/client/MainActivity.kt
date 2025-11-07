@@ -3,6 +3,7 @@ package com.bbtec.mdm.client
 import android.os.Bundle
 import android.util.Log
 import android.widget.Button
+import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -15,6 +16,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var apiClient: ApiClient
     private lateinit var syncButton: Button
     private lateinit var syncStatusText: TextView
+    private lateinit var pingIntervalInput: EditText
+    private lateinit var savePingIntervalButton: Button
+    private lateinit var pingIntervalStatusText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,10 +31,19 @@ class MainActivity : AppCompatActivity() {
         // Initialize UI elements
         syncButton = findViewById(R.id.syncButton)
         syncStatusText = findViewById(R.id.syncStatusText)
+        pingIntervalInput = findViewById(R.id.pingIntervalInput)
+        savePingIntervalButton = findViewById(R.id.savePingIntervalButton)
+        pingIntervalStatusText = findViewById(R.id.pingIntervalStatusText)
 
         // Set up sync button
         syncButton.setOnClickListener {
             performSync()
+        }
+
+        // Set up ping interval controls
+        pingIntervalInput.setText(prefsManager.getPingInterval().toString())
+        savePingIntervalButton.setOnClickListener {
+            savePingInterval()
         }
 
         // Register device on first launch
@@ -131,6 +144,41 @@ class MainActivity : AppCompatActivity() {
 
                 // Update status display
                 updateStatus()
+            }
+        }
+    }
+
+    private fun savePingInterval() {
+        val inputText = pingIntervalInput.text.toString()
+
+        if (inputText.isEmpty()) {
+            Toast.makeText(this, "Please enter a ping interval", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val interval = inputText.toIntOrNull()
+
+        if (interval == null || interval < 1 || interval > 180) {
+            Toast.makeText(this, "Ping interval must be between 1 and 180 minutes", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Disable button during save
+        savePingIntervalButton.isEnabled = false
+        pingIntervalStatusText.text = "Saving..."
+        Toast.makeText(this, "Updating ping interval...", Toast.LENGTH_SHORT).show()
+
+        apiClient.updatePingInterval(interval) { success ->
+            runOnUiThread {
+                if (success) {
+                    pingIntervalStatusText.text = "Saved at ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}"
+                    Toast.makeText(this, "Ping interval updated to $interval minutes", Toast.LENGTH_SHORT).show()
+                    updateStatus()
+                } else {
+                    pingIntervalStatusText.text = "Failed to save"
+                    Toast.makeText(this, "Failed to update ping interval", Toast.LENGTH_SHORT).show()
+                }
+                savePingIntervalButton.isEnabled = true
             }
         }
     }
