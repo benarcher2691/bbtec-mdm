@@ -56,6 +56,11 @@ export function QRCodeGenerator() {
       return
     }
 
+    if (!selectedPolicyId) {
+      setError('Default policy not found. Please contact support.')
+      return
+    }
+
     setLoading(true)
     setError(null)
     setEnrolledDevice(null)
