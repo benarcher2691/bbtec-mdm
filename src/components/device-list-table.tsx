@@ -112,6 +112,12 @@ export function DeviceListTable() {
                     </span>
                   </dd>
                 </div>
+                <div>
+                  <dt className="text-sm font-medium">Company</dt>
+                  <dd className="text-sm text-muted-foreground">
+                    {selectedDevice.companyName || <span className="italic">No company assigned</span>}
+                  </dd>
+                </div>
               </dl>
             </div>
 
@@ -240,6 +246,7 @@ export function DeviceListTable() {
               <tr>
                 <th className="text-left p-4 font-medium text-sm w-12"></th>
                 <th className="text-left p-4 font-medium text-sm">Device</th>
+                <th className="text-left p-4 font-medium text-sm">Company</th>
                 <th className="text-left p-4 font-medium text-sm">Android Version</th>
                 <th className="text-left p-4 font-medium text-sm">Status</th>
                 <th className="text-left p-4 font-medium text-sm">Last Heartbeat</th>
@@ -277,6 +284,13 @@ export function DeviceListTable() {
                         Serial: {device.serialNumber}
                       </p>
                     </div>
+                  </td>
+
+                  {/* Company Name */}
+                  <td className="p-4">
+                    <p className="text-sm">
+                      {device.companyName || <span className="text-muted-foreground italic">No company</span>}
+                    </p>
                   </td>
 
                   {/* Android Version */}

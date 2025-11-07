@@ -233,11 +233,25 @@ export const listDevices = query({
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) return []
 
-    return await ctx.db
+    const devices = await ctx.db
       .query("deviceClients")
       .withIndex("by_user", (q) => q.eq("userId", identity.subject))
       .order("desc")
       .collect()
+
+    // Enrich with company user data
+    return await Promise.all(
+      devices.map(async (device) => {
+        let companyUser = null
+        if (device.companyUserId) {
+          companyUser = await ctx.db.get(device.companyUserId)
+        }
+        return {
+          ...device,
+          companyName: companyUser?.companyName || null,
+        }
+      })
+    )
   },
 })
 
@@ -256,7 +270,18 @@ export const getDevice = query({
       .filter((q) => q.eq(q.field("userId"), identity.subject))
       .first()
 
-    return device
+    if (!device) return null
+
+    // Enrich with company user data
+    let companyUser = null
+    if (device.companyUserId) {
+      companyUser = await ctx.db.get(device.companyUserId)
+    }
+
+    return {
+      ...device,
+      companyName: companyUser?.companyName || null,
+    }
   },
 })
 
