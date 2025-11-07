@@ -5,14 +5,6 @@ import { useQuery, useMutation } from "convex/react"
 import { api } from "../../convex/_generated/api"
 import { Button } from "@/components/ui/button"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -22,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Smartphone, RefreshCw, AlertCircle, MoreVertical, Trash2, ArrowLeft } from "lucide-react"
+import { Smartphone, RefreshCw, AlertCircle, Trash2, ArrowLeft } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
 export function DeviceListTable() {
@@ -218,7 +210,7 @@ export function DeviceListTable() {
             </p>
           </div>
           <Button asChild>
-            <a href="/enrollment/qr-codes">Generate QR Code</a>
+            <a href="/enrollment/enroll-device">Generate QR Code</a>
           </Button>
         </div>
       </div>
@@ -231,6 +223,9 @@ export function DeviceListTable() {
       <div className="flex justify-between items-center">
         <p className="text-sm text-muted-foreground">
           {devices.length} {devices.length === 1 ? 'device' : 'devices'} enrolled
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Double-click a device to view details and actions
         </p>
       </div>
 
@@ -246,7 +241,6 @@ export function DeviceListTable() {
                 <th className="text-left p-4 font-medium text-sm">Status</th>
                 <th className="text-left p-4 font-medium text-sm">Last Heartbeat</th>
                 <th className="text-left p-4 font-medium text-sm">Mode</th>
-                <th className="text-left p-4 font-medium text-sm w-12"></th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -317,40 +311,6 @@ export function DeviceListTable() {
                     }`}>
                       {device.isDeviceOwner ? 'Device Owner' : 'Profile Owner'}
                     </span>
-                  </td>
-
-                  {/* Actions Menu */}
-                  <td className="p-4">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-red-600"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteClick(device, true)
-                          }}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Wipe Device
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteClick(device, false)
-                          }}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Remove from List
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
                   </td>
                 </tr>
               ))}

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ChevronDown, ChevronRight, Smartphone, QrCode, Package } from "lucide-react"
+import { ChevronDown, ChevronRight, Smartphone, QrCode, Package, Home, Download, Settings, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -21,16 +21,29 @@ interface NavItem {
 
 const navigationSections: NavSection[] = [
   {
+    title: "Home",
+    items: [
+      { title: "Dashboard", href: "/home/dashboard", icon: Home },
+    ],
+  },
+  {
     title: "Enrollment",
     items: [
-      { title: "QR Codes", href: "/enrollment/qr-codes", icon: QrCode },
+      { title: "Update MDM client", href: "/enrollment/update-client", icon: Download },
+      { title: "Enroll device", href: "/enrollment/enroll-device", icon: QrCode },
     ],
   },
   {
     title: "Management",
     items: [
       { title: "Devices", href: "/management/devices", icon: Smartphone },
-      { title: "Applications", href: "/management/applications", icon: Package },
+      { title: "Configuration profiles", href: "/management/configuration-profiles", icon: Settings },
+    ],
+  },
+  {
+    title: "Company",
+    items: [
+      { title: "Users", href: "/company/users", icon: Users },
     ],
   },
 ]
@@ -38,8 +51,10 @@ const navigationSections: NavSection[] = [
 export function Sidebar() {
   const pathname = usePathname()
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    Home: true,
     Enrollment: true,
     Management: true,
+    Company: true,
   })
 
   const toggleSection = (title: string) => {

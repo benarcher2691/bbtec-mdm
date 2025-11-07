@@ -12,7 +12,7 @@ export default function Home() {
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
-      router.push("/dashboard")
+      router.push("/home/dashboard")
     }
   }, [isLoaded, isSignedIn, router])
 
