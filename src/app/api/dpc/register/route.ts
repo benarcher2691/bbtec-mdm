@@ -36,6 +36,22 @@ export async function POST(request: NextRequest) {
       tokenPreview: enrollmentToken ? enrollmentToken.substring(0, 8) + '...' : 'MISSING',
     })
 
+    // VALIDATION: Detect permission failure sentinel value
+    if (serialNumber === '0') {
+      console.error(`[DPC REGISTER] ⚠️ PERMISSION FAILURE DETECTED: Serial number is '0' (sentinel value)`)
+      console.error(`[DPC REGISTER] This indicates READ_PHONE_STATE permission was never granted on device`)
+      console.error(`[DPC REGISTER] Device: ${manufacturer} ${model}, Android ${androidVersion}`)
+      console.error(`[DPC REGISTER] This device will be registered but with invalid serial number`)
+    }
+
+    // VALIDATION: Detect race condition - serial equals Android ID
+    if (serialNumber === androidId && serialNumber !== '0') {
+      console.warn(`[DPC REGISTER] ⚠️ RACE CONDITION DETECTED: Serial number equals Android ID`)
+      console.warn(`[DPC REGISTER] This should not happen with the retry logic - indicates system issue`)
+      console.warn(`[DPC REGISTER] Device: ${manufacturer} ${model}, Android ${androidVersion}`)
+      console.warn(`[DPC REGISTER] Serial/Android ID: ${serialNumber}`)
+    }
+
     // Validate required fields
     if (!enrollmentToken || !serialNumber || !androidId || !model || !manufacturer || !androidVersion) {
       console.error(`[DPC REGISTER] ERROR: Missing required fields`)

@@ -233,7 +233,19 @@ export function DeviceListTable() {
               <dl className="space-y-2">
                 <div>
                   <dt className="text-sm font-medium">Serial Number</dt>
-                  <dd className="text-sm text-muted-foreground">{selectedDevice.serialNumber}</dd>
+                  <dd className="text-sm">
+                    {selectedDevice.serialNumber === '0' ? (
+                      <span className="text-red-600 font-semibold" title="Permission failure - serial number could not be retrieved during enrollment">
+                        {selectedDevice.serialNumber} ⚠️ ERROR (Permission Failure)
+                      </span>
+                    ) : selectedDevice.serialNumber === selectedDevice.androidId ? (
+                      <span className="text-orange-600" title="Race condition detected - serial equals Android ID">
+                        {selectedDevice.serialNumber} ⚠️ (Race Condition)
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">{selectedDevice.serialNumber}</span>
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-sm font-medium">Android ID</dt>
@@ -480,7 +492,17 @@ export function DeviceListTable() {
                         {device.manufacturer} {device.model}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Serial: {device.serialNumber}
+                        Serial: {device.serialNumber === '0' ? (
+                          <span className="text-red-600 font-semibold" title="Permission failure - serial number could not be retrieved">
+                            {device.serialNumber} (ERROR)
+                          </span>
+                        ) : device.serialNumber === device.androidId ? (
+                          <span className="text-orange-600" title="Race condition - serial equals Android ID">
+                            {device.serialNumber} (RACE)
+                          </span>
+                        ) : (
+                          device.serialNumber
+                        )}
                       </p>
                     </div>
                   </td>

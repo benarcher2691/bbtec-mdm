@@ -108,28 +108,53 @@ class DeviceRegistration(private val context: Context) {
         val adminComponent = ComponentName(context, MdmDeviceAdminReceiver::class.java)
         val isDeviceOwner = dpm.isDeviceOwnerApp(context.packageName)
 
-        // Get hardware serial number (should work now with READ_PHONE_STATE auto-granted)
-        val serialNumber = try {
-            val serial = Build.getSerial()
-            Log.e(TAG, "✅ Got hardware serial via Build.getSerial(): $serial")
-            serial
-        } catch (e: SecurityException) {
-            // Fallback to ANDROID_ID if serial number is not accessible
-            Log.w(TAG, "❌ Cannot access serial number (READ_PHONE_STATE not granted?), falling back to ANDROID_ID", e)
-            Settings.Secure.getString(
-                context.contentResolver,
-                Settings.Secure.ANDROID_ID
-            )
-        }
-
-        Log.e(TAG, "Hardware serial number: $serialNumber")
-
+        // Get Android ID first (always available, never requires permission)
         val androidId = Settings.Secure.getString(
             context.contentResolver,
             Settings.Secure.ANDROID_ID
         )
 
-        Log.e(TAG, "Serial/Android ID: $serialNumber")
+        // Get hardware serial number with retry logic
+        // DEFENSE: If serialNumber == androidId, it means Build.getSerial() threw SecurityException
+        // and we fell back to androidId. This is a BUG - retry to get the real serial number.
+        val delays = listOf(0L, 100L, 300L, 500L)
+        var serialNumber = ""
+
+        for ((attempt, delay) in delays.withIndex()) {
+            if (delay > 0) {
+                Log.w(TAG, "⏳ Retry attempt ${attempt + 1}/${delays.size} to get serial number (waiting ${delay}ms)...")
+                Thread.sleep(delay)
+            }
+
+            serialNumber = try {
+                val serial = Build.getSerial()
+                Log.d(TAG, "✅ Got hardware serial via Build.getSerial(): $serial")
+                serial
+            } catch (e: SecurityException) {
+                // Fallback to ANDROID_ID if serial number is not accessible
+                Log.w(TAG, "❌ Cannot access serial number (READ_PHONE_STATE not granted?), falling back to ANDROID_ID", e)
+                androidId
+            }
+
+            // VALIDATION: Check if we got a valid serial number (different from Android ID)
+            if (serialNumber != androidId) {
+                if (attempt > 0) {
+                    Log.d(TAG, "✅ Got valid serial number after ${attempt + 1} attempts")
+                }
+                break
+            } else {
+                Log.w(TAG, "⚠️ Attempt ${attempt + 1}/${delays.size}: Serial number equals Android ID (permission not ready)")
+                if (attempt == delays.size - 1) {
+                    // Last attempt failed - use sentinel value
+                    serialNumber = "0"
+                    Log.e(TAG, "❌ Failed to get valid serial number after ${delays.size} attempts (${delays.sum()}ms total)")
+                    Log.e(TAG, "Reporting serial number as '0' (permission failure sentinel - easy to detect)")
+                }
+            }
+        }
+
+        Log.e(TAG, "Final serial number: $serialNumber")
+        Log.e(TAG, "Android ID: $androidId")
         Log.e(TAG, "Is Device Owner: $isDeviceOwner")
         Log.e(TAG, "Model: ${Build.MODEL}")
         Log.e(TAG, "Manufacturer: ${Build.MANUFACTURER}")
