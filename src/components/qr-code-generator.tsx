@@ -5,6 +5,14 @@ import { useQuery } from "convex/react"
 import { api } from "../../convex/_generated/api"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { createEnrollmentQRCode, listDevices } from "@/app/actions/enrollment"
 import { QrCode, Copy, Check, AlertCircle, ArrowRight, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -27,11 +35,13 @@ export function QRCodeGenerator() {
   const [waitingForEnrollment, setWaitingForEnrollment] = useState(false)
   const [deviceCountBefore, setDeviceCountBefore] = useState(0)
   const [selectedPolicyId, setSelectedPolicyId] = useState<Id<"policies"> | null>(null)
+  const [selectedCompanyUserId, setSelectedCompanyUserId] = useState<Id<"companyUsers"> | null>(null)
   const dpcType = 'bbtec' // Always use BBTec MDM Client
   const pollingInterval = useRef<NodeJS.Timeout | null>(null)
 
-  // Query default policy from Convex
+  // Query default policy and company users from Convex
   const defaultPolicy = useQuery(api.policies.getDefaultPolicy)
+  const companyUsers = useQuery(api.companyUsers.listCompanyUsers)
 
   // Set default policy when it loads
   useEffect(() => {
@@ -41,6 +51,11 @@ export function QRCodeGenerator() {
   }, [defaultPolicy, selectedPolicyId])
 
   const handleGenerateToken = async () => {
+    if (!selectedCompanyUserId) {
+      setError('Please select a company user first')
+      return
+    }
+
     setLoading(true)
     setError(null)
     setEnrolledDevice(null)
@@ -52,7 +67,7 @@ export function QRCodeGenerator() {
         setDeviceCountBefore(devicesResult.devices.length)
       }
 
-      const result = await createEnrollmentQRCode(selectedPolicyId, 3600, false, dpcType)
+      const result = await createEnrollmentQRCode(selectedPolicyId, 3600, false, dpcType, selectedCompanyUserId)
 
       console.log('[QR GEN CLIENT] Full result:', result)
       console.log('[QR GEN CLIENT] Debug object:', result.debug)
@@ -140,11 +155,36 @@ export function QRCodeGenerator() {
 
   return (
     <div className="space-y-6">
+      {/* Company User Selection */}
+      <div className="space-y-2">
+        <Label htmlFor="company-user-select">Company User *</Label>
+        <Select
+          value={selectedCompanyUserId || undefined}
+          onValueChange={(value) => setSelectedCompanyUserId(value as Id<"companyUsers">)}
+        >
+          <SelectTrigger id="company-user-select" className="w-full md:w-[400px]">
+            <SelectValue placeholder="Select a company user" />
+          </SelectTrigger>
+          <SelectContent>
+            {companyUsers?.map((user) => (
+              <SelectItem key={user._id} value={user._id}>
+                {user.companyName} - {user.contactPersonName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {companyUsers?.length === 0 && (
+          <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+            No company users available. Please create a user in Company → Users first.
+          </p>
+        )}
+      </div>
+
       {/* Generate Button */}
       <div className="flex gap-4 items-center">
         <Button
           onClick={handleGenerateToken}
-          disabled={loading}
+          disabled={loading || !selectedCompanyUserId}
           size="lg"
         >
           {loading ? (

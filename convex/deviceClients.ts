@@ -16,6 +16,7 @@ export const registerDevice = mutation({
     isDeviceOwner: v.boolean(),
     userId: v.optional(v.string()), // Optional, can be assigned later
     policyId: v.optional(v.id("policies")), // Optional, for DPC enrollment
+    companyUserId: v.optional(v.id("companyUsers")), // Optional, company user assignment
   },
   handler: async (ctx, args) => {
     // Check if device already registered (by serial number)
@@ -37,6 +38,7 @@ export const registerDevice = mutation({
         androidVersion: args.androidVersion,
         isDeviceOwner: args.isDeviceOwner,
         ...(args.policyId ? { policyId: args.policyId } : {}),
+        ...(args.companyUserId ? { companyUserId: args.companyUserId } : {}),
       })
 
       return {
@@ -71,6 +73,7 @@ export const registerDevice = mutation({
       isDeviceOwner: args.isDeviceOwner,
       apiToken,
       ...(args.policyId ? { policyId: args.policyId } : {}),
+      ...(args.companyUserId ? { companyUserId: args.companyUserId } : {}),
     })
 
     return {

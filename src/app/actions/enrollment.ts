@@ -29,7 +29,8 @@ export async function createEnrollmentQRCode(
   policyId: Id<"policies">,
   duration: number = 3600,
   testMode: boolean = false,
-  dpcType: 'bbtec' | 'testdpc' = 'bbtec'
+  dpcType: 'bbtec' | 'testdpc' = 'bbtec',
+  companyUserId?: Id<"companyUsers">
 ) {
   const { userId } = await auth()
 
@@ -88,6 +89,7 @@ export async function createEnrollmentQRCode(
     const tokenId = await convex.mutation(api.enrollmentTokens.createEnrollmentToken, {
       policyId,
       expiresInSeconds: duration,
+      companyUserId,
     })
 
     const token = await convex.query(api.enrollmentTokens.getToken, { tokenId })

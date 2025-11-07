@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Register device (creates new or updates existing)
-    // Pass policyId directly to avoid authentication issues
+    // Pass policyId and companyUserId directly to avoid authentication issues
     console.log(`[DPC REGISTER] Registering device in database...`)
     const result = await convex.mutation(api.deviceClients.registerDevice, {
       deviceId: serialNumber,
@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
       isDeviceOwner: isDeviceOwner ?? true,
       userId: tokenData.userId, // Assign device to token creator
       policyId: tokenData.policyId, // Assign policy during registration
+      companyUserId: tokenData.companyUserId, // Assign company user
     })
 
     console.log(`[DPC REGISTER] Device registered with policy ${tokenData.policyId || 'none'}`)

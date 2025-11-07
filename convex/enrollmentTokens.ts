@@ -8,6 +8,7 @@ export const createEnrollmentToken = mutation({
   args: {
     policyId: v.id("policies"),
     expiresInSeconds: v.number(), // Default: 3600 (1 hour)
+    companyUserId: v.optional(v.id("companyUsers")),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
@@ -17,6 +18,14 @@ export const createEnrollmentToken = mutation({
     const policy = await ctx.db.get(args.policyId)
     if (!policy || policy.userId !== identity.subject) {
       throw new Error("Policy not found or unauthorized")
+    }
+
+    // Verify company user if provided
+    if (args.companyUserId) {
+      const companyUser = await ctx.db.get(args.companyUserId)
+      if (!companyUser || companyUser.ownerId !== identity.subject) {
+        throw new Error("Company user not found or unauthorized")
+      }
     }
 
     // Get current APK version
@@ -39,6 +48,7 @@ export const createEnrollmentToken = mutation({
       token,
       userId: identity.subject,
       policyId: args.policyId,
+      companyUserId: args.companyUserId,
       createdAt: now,
       expiresAt,
       used: false,
@@ -101,6 +111,7 @@ export const validateToken = query({
       policyId: tokenRecord.policyId,
       serverUrl: tokenRecord.serverUrl,
       userId: tokenRecord.userId,
+      companyUserId: tokenRecord.companyUserId,
     }
   },
 })

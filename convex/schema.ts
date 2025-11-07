@@ -60,6 +60,7 @@ export default defineSchema({
   deviceClients: defineTable({
     deviceId: v.string(),              // NOW: Hardware serial number (from Build.getSerial())
     userId: v.string(),                // Clerk user who owns device
+    companyUserId: v.optional(v.id("companyUsers")), // Company user assignment
     serialNumber: v.string(),          // Hardware serial (primary identifier)
     androidId: v.string(),             // Android ID (backup identifier)
     model: v.string(),
@@ -77,7 +78,8 @@ export default defineSchema({
   }).index("by_device", ["deviceId"])
     .index("by_serial", ["serialNumber"])
     .index("by_user", ["userId"])
-    .index("by_token", ["apiToken"]),
+    .index("by_token", ["apiToken"])
+    .index("by_company_user", ["companyUserId"]),
 
   // Installation command queue
   installCommands: defineTable({
@@ -136,6 +138,7 @@ export default defineSchema({
     token: v.string(),                 // UUID
     userId: v.string(),                // Creator
     policyId: v.id("policies"),        // Policy to apply on enrollment
+    companyUserId: v.optional(v.id("companyUsers")), // Company user assignment
 
     createdAt: v.number(),
     expiresAt: v.number(),
@@ -181,4 +184,15 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
   }).index("by_device", ["deviceId"])
     .index("by_status", ["status"]),
+
+  // Company users (customers/organizations)
+  companyUsers: defineTable({
+    companyName: v.string(),
+    contactPersonName: v.string(),
+    contactPersonEmail: v.string(),    // Unique identifier
+    ownerId: v.string(),               // Clerk user ID who created this
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_email", ["contactPersonEmail"])
+    .index("by_owner", ["ownerId"]),
 });
