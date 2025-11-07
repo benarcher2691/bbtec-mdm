@@ -52,15 +52,29 @@ export const getPendingCommands = query({
 
 /**
  * Update command status (called by DPC after execution)
+ * SECURITY: Verifies command belongs to authenticated device
  */
 export const updateCommandStatus = mutation({
   args: {
     commandId: v.id("deviceCommands"),
+    authenticatedDeviceId: v.string(), // Device ID from authenticated API token
     status: v.string(), // "executing", "completed", "failed"
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now()
+
+    // SECURITY: Get command and verify ownership first
+    const command = await ctx.db.get(args.commandId)
+    if (!command) {
+      throw new Error("Command not found")
+    }
+
+    // CRITICAL: Verify the command belongs to the authenticated device
+    // This prevents Device A from manipulating Device B's commands
+    if (command.deviceId !== args.authenticatedDeviceId) {
+      throw new Error("Unauthorized - command does not belong to this device")
+    }
 
     const updates: any = {
       status: args.status,
@@ -82,19 +96,16 @@ export const updateCommandStatus = mutation({
     // 1. Device disappears from UI immediately
     // 2. Re-enrollment creates fresh record (no inherited settings)
     // 3. No orphaned wiped devices in database
-    if (args.status === "completed") {
-      const command = await ctx.db.get(args.commandId)
+    // 4. Wiped device can't report again (Android ID changed after wipe)
+    if (args.status === "completed" && command.commandType === "wipe") {
+      // Find and delete the device
+      const device = await ctx.db
+        .query("deviceClients")
+        .withIndex("by_device", (q) => q.eq("deviceId", command.deviceId))
+        .first()
 
-      if (command && command.commandType === "wipe") {
-        // Find and delete the device
-        const device = await ctx.db
-          .query("deviceClients")
-          .withIndex("by_device", (q) => q.eq("deviceId", command.deviceId))
-          .first()
-
-        if (device) {
-          await ctx.db.delete(device._id)
-        }
+      if (device) {
+        await ctx.db.delete(device._id)
       }
     }
   },

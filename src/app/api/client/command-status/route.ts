@@ -20,13 +20,25 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { commandId, status, error } = body
 
-    await convex.mutation(api.deviceClients.updateCommandStatus, {
-      commandId: commandId as Id<"installCommands">,
-      status,
-      error,
-    })
-
-    return NextResponse.json({ success: true })
+    // Try to update as a device command first (wipe/lock/reboot)
+    // These commands have ownership verification and auto-delete logic when wipe completes
+    try {
+      await convex.mutation(api.deviceCommands.updateCommandStatus, {
+        commandId: commandId as Id<"deviceCommands">,
+        authenticatedDeviceId: auth.device.deviceId, // Pass Android ID for ownership verification
+        status,
+        error,
+      })
+      return NextResponse.json({ success: true })
+    } catch (deviceCommandError) {
+      // If not found in deviceCommands, try installCommands (APK installs)
+      await convex.mutation(api.deviceClients.updateCommandStatus, {
+        commandId: commandId as Id<"installCommands">,
+        status,
+        error,
+      })
+      return NextResponse.json({ success: true })
+    }
   } catch (error) {
     console.error('Status update error:', error)
     return NextResponse.json(

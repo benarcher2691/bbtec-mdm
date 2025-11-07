@@ -19,10 +19,11 @@ export const registerDevice = mutation({
     companyUserId: v.optional(v.id("companyUsers")), // Optional, company user assignment
   },
   handler: async (ctx, args) => {
-    // Check if device already registered (by serial number)
+    // Check if device already registered (by Android ID)
+    // Android ID changes on factory reset, ensuring each enrollment is fresh
     const existing = await ctx.db
       .query("deviceClients")
-      .withIndex("by_serial", (q) => q.eq("serialNumber", args.serialNumber))
+      .withIndex("by_device", (q) => q.eq("deviceId", args.androidId))
       .first()
 
     if (existing) {
@@ -83,9 +84,9 @@ export const registerDevice = mutation({
 
     // New registration
     const deviceClientId = await ctx.db.insert("deviceClients", {
-      deviceId: args.serialNumber,     // Use serial number as primary ID
+      deviceId: args.androidId,        // Use Android ID as primary ID (changes on factory reset)
       userId,
-      serialNumber: args.serialNumber,
+      serialNumber: args.serialNumber,  // Keep serial for admin reference
       androidId: args.androidId,
       model: args.model,
       manufacturer: args.manufacturer,
