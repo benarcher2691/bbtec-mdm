@@ -244,6 +244,7 @@ export const updatePingIntervalFromDevice = mutation({
 
     await ctx.db.patch(device._id, {
       pingInterval: args.pingInterval,
+      lastHeartbeat: Date.now(), // Update timestamp to trigger reactive updates
     })
 
     return { success: true }
