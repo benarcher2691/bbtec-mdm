@@ -1,9 +1,93 @@
 # BBTec MDM - Roadmap & Next Steps
 
 **Last Updated:** 2025-11-07
-**Current Status:** ✅ Device commands working, ping interval sync implemented, wipe command tested successfully
+**Current Status:** ✅ Security hardened with Android ID-based device identification, Applications feature accessible, device commands working
 
 ## Recent Achievements
+
+### 2025-11-07: Security Hardening - Android ID Device Identification (v0.0.29)
+
+**🔒 CRITICAL SECURITY FIX - Device Identification & Command Ownership**
+
+**Problem Identified:**
+- Devices were identified by serial number (doesn't change on factory reset)
+- No ownership verification on command status updates
+- Device A could maliciously manipulate Device B's commands
+- Wiped devices could re-register with stale credentials
+
+**Solution Implemented:**
+- ✅ **Switched to Android ID as primary device identifier** (changes on factory reset)
+- ✅ **Added command ownership verification** to prevent cross-device attacks
+- ✅ **Auto-delete device records** when wipe command completes
+- ✅ **Serial number kept for admin reference only**
+
+**Security Benefits:**
+- ✅ Wiped devices automatically disconnected (new Android ID after factory reset)
+- ✅ Cross-device command manipulation prevented by ownership verification
+- ✅ Natural enrollment separation - each factory reset starts fresh
+- ✅ Self-healing security model - no stale credentials possible
+- ✅ No admin intervention needed after wipe
+
+**Technical Changes:**
+- `convex/deviceClients.ts`: registerDevice now uses androidId as primary deviceId
+- `convex/deviceCommands.ts`: Added authenticatedDeviceId verification to updateCommandStatus
+- `src/app/api/dpc/register/route.ts`: Pass androidId as device identifier
+- `src/app/api/client/command-status/route.ts`: Pass authenticated device ID for ownership verification
+
+**Breaking Change:** Existing enrolled devices need re-enrollment (acceptable for test environment)
+
+**Files Modified:**
+- Backend mutations: Device registration, command status updates
+- API routes: DPC registration, command status reporting
+- Security pattern: All device commands now verify ownership before execution
+
+---
+
+### 2025-11-07: Applications Feature Accessibility (v0.0.28)
+
+**✅ Made App Deployment Feature Accessible**
+- **Discovery:** Complete app deployment implementation existed but was hidden from UI
+- **Changes:**
+  - Added "Applications" link to sidebar navigation (Management section)
+  - Added "Install App" button to device detail view
+  - Created install dialog with app selection UI
+  - Implemented handleInstallApp function
+
+**What's Now Working:**
+- ✅ Upload APKs from web dashboard (already working)
+- ✅ APKs stored in Convex storage (already working)
+- ✅ Install apps to devices from web UI (newly accessible)
+- ✅ Android client: Download and silent install APKs (already implemented)
+- ✅ Installation status tracking (pending/executing/completed/failed)
+
+**Full App Deployment Flow:**
+1. Admin uploads APK via Applications page → stored in Convex
+2. Admin selects device → clicks "Install App" → selects app
+3. Install command created in backend
+4. Device polls, receives install command
+5. Device downloads APK from Convex storage URL
+6. Silent installation via PackageInstaller API (Device Owner mode)
+7. Status reported back to backend
+
+**Result:** App deployment feature is now fully functional and accessible!
+
+---
+
+### 2025-11-07: Device Wipe Auto-Delete & Serial Number Fix (v0.0.28)
+
+**✅ Auto-Delete Device After Wipe**
+- Devices now automatically deleted from database when wipe command completes
+- Benefits:
+  - Device disappears from UI immediately
+  - Re-enrollment creates fresh record (no inherited settings)
+  - No orphaned wiped devices in database
+  - Combined with Android ID security: wiped device can't report again
+
+**✅ Fixed Serial Number Update Bug**
+- Serial number now properly updated during device re-registration
+- Fixes regression where serial wasn't being stored on re-enrollment
+
+---
 
 ### 2025-11-07: Ping Interval & Device Commands (v0.0.27)
 
@@ -24,9 +108,10 @@
 - Confirmed: Pull-based architecture works correctly, devices poll at configured intervals
 - Commands processed: wipe, lock, reboot (all implemented in Android client)
 
-**⚠️ Known Issues Discovered:**
-- **Serial Number Display Bug:** Serial number no longer displayed in Device Management page (regression from 2025-11-06 commit) - currently shows Android ID instead
-- **Wipe Status Not Updating:** After successful device wipe, web dashboard still shows "Factory reset pending" - needs status update logic when device goes offline permanently
+**⚠️ Known Issues (RESOLVED in v0.0.28-v0.0.29):**
+- ~~Serial Number Display Bug~~ - ✅ **FIXED in v0.0.28**: Serial number now properly stored and updated
+- ~~Wipe Status Not Updating~~ - ✅ **FIXED in v0.0.28**: Device auto-deleted when wipe completes
+- ~~Security Vulnerability~~ - ✅ **FIXED in v0.0.29**: Android ID-based identification with ownership verification
 
 ### 2025-11-06: Hardware Serial Number Access (v0.0.24)
 
@@ -38,9 +123,9 @@
 
 ## Roadmap - Priority Order
 
-### 1. Device Management Commands 🎯 **[MOSTLY COMPLETE]**
+### 1. Device Management Commands 🎯 **[COMPLETE]**
 
-**Status:** ✅ Core functionality working! Commands execute successfully, but status tracking needs refinement.
+**Status:** ✅ Fully working! Commands execute successfully with proper security and status tracking.
 
 **What's Working:**
 - [x] Android client: Poll for commands from backend (via `ApiClient.getCommands()`)
@@ -48,15 +133,17 @@
 - [x] Android client: Execute lock command using `DevicePolicyManager.lockNow()`
 - [x] Android client: Execute reboot command using `DevicePolicyManager.reboot()`
 - [x] Android client: Report command execution status back to backend
-- [x] Web UI: Show command execution status (pending)
+- [x] Web UI: Show command execution status (pending/executing/completed/failed)
 - [x] Sync button in Android client for immediate command check
+- [x] Serial number properly stored and displayed (v0.0.28)
+- [x] Device auto-deleted after wipe completes (v0.0.28)
+- [x] Command ownership verification to prevent cross-device attacks (v0.0.29)
 
-**What Needs Work:**
-- [ ] Fix serial number display in Device Management page (regression)
-- [ ] Web UI: Auto-update when device wipes (device goes offline permanently)
-- [ ] Web UI: Better handling of completed/failed command states
+**What Could Be Added (Future Enhancements):**
 - [ ] Add more commands: clear passcode, set kiosk mode, configure WiFi
 - [ ] Command history/audit trail in web UI
+- [ ] Scheduled commands (execute at specific time)
+- [ ] Bulk commands (send to multiple devices)
 
 **Technical Details:**
 - Backend already has `deviceCommands` table in Convex
@@ -79,11 +166,23 @@
 
 ---
 
-### 2. Security Audit 🔒 **[HIGH PRIORITY - BEFORE PRODUCTION]**
+### 2. Security Audit 🔒 **[IN PROGRESS]**
 
-**Status:** ⚠️ Not yet audited - critical before any production use
+**Status:** ⚠️ Major security improvements completed (v0.0.29), additional review needed before production
 
-**What to Audit:**
+**✅ Security Improvements Completed:**
+- [x] **Device Identification Security (v0.0.29):**
+  - ✅ Switched from serial number to Android ID (changes on factory reset)
+  - ✅ Added command ownership verification to prevent cross-device attacks
+  - ✅ Verified `command.deviceId === authenticatedDeviceId` before operations
+  - ✅ Auto-delete wiped devices to prevent stale credentials
+
+- [x] **Command Status Security (v0.0.29):**
+  - ✅ `/api/client/command-status` now passes authenticated device ID
+  - ✅ `deviceCommands.updateCommandStatus` verifies ownership before execution
+  - ✅ Device A cannot manipulate Device B's commands
+
+**What Still Needs Audit:**
 - [ ] **API Endpoints:** Review all `/api/*` routes for proper authentication and authorization
   - Check device authentication (API token validation)
   - Check user authentication (Clerk session validation)
@@ -100,6 +199,7 @@
   - `/api/client/heartbeat` - Device token auth only ✅
   - `/api/client/ping-interval` - Device token auth only ✅
   - `/api/client/commands` - Device token auth only (needs verification)
+  - `/api/client/command-status` - Device token auth + ownership verification ✅ (v0.0.29)
   - `/api/dpc/register` - Enrollment token auth (needs verification)
 
 - [ ] **Web Dashboard Endpoints (User Auth Required):**
@@ -131,17 +231,26 @@
 
 ---
 
-### 3. App Deployment 📱
+### 3. App Deployment 📱 **[COMPLETE]**
 
-**Status:** Web UI can upload APKs to Convex storage, but devices can't receive/install them yet.
+**Status:** ✅ Fully functional! End-to-end app deployment working (made accessible in v0.0.28)
 
-**What to Build:**
-- [ ] Backend: Assign APKs to devices or policies
-- [ ] Android client: Poll for assigned apps
-- [ ] Android client: Download APK from Convex storage URL
-- [ ] Android client: Silent install using `DevicePolicyManager.installExistingPackage()` or `PackageInstaller`
-- [ ] Track installation status (downloading/installing/installed/failed)
-- [ ] Support app updates and removal
+**What's Working:**
+- [x] Web UI: Upload APKs to Convex storage
+- [x] Web UI: Applications page in sidebar navigation (v0.0.28)
+- [x] Web UI: Install App button in device detail view (v0.0.28)
+- [x] Backend: Create install commands for devices
+- [x] Android client: Poll for install commands
+- [x] Android client: Download APK from Convex storage URL
+- [x] Android client: Silent install using PackageInstaller API (Device Owner mode)
+- [x] Track installation status (pending/downloading/installing/completed/failed)
+
+**What Could Be Added (Future Enhancements):**
+- [ ] Support app updates (detect version changes)
+- [ ] Support app removal/uninstall commands
+- [ ] Policy-based app assignment (assign apps to all devices with a policy)
+- [ ] App inventory tracking (list of installed apps per device)
+- [ ] App update notifications
 
 **Technical Details:**
 - Use Device Owner API for silent installation (no user prompts)
@@ -240,9 +349,10 @@
 **Android Client:**
 - Kotlin, Android 10+ (API 29+)
 - Device Owner mode (full device control)
-- Current version: v0.0.27
+- Current backend version: v0.0.29 (requires re-enrollment with Android ID-based system)
 - Signature: `53:CD:0E:1A:9E:3F:3A:38:C6:66:84:2A:98:94:CA:8E:B1:ED:DC:DC:F4:FB:0E:13:10:B3:03:8F:A7:1B:CE:21`
-- Features: Device commands (wipe/lock/reboot), ping interval config, manual sync button
+- Features: Device commands (wipe/lock/reboot), ping interval config, manual sync button, app installation
+- Security: Android ID-based device identification (changes on factory reset)
 
 **Enrollment Flow:**
 1. Admin generates QR code (includes enrollment token, APK download URL)
@@ -258,25 +368,34 @@
 
 ## Next Steps - Recommended Priority
 
-### Immediate (Bug Fixes)
-1. **Fix serial number display bug** in Device Management page (regression from 2025-11-06)
-2. **Fix wipe command status tracking** - web UI should detect when device goes offline after wipe
+### ✅ Recently Completed (v0.0.28-v0.0.29)
+1. ~~Fix serial number display bug~~ - ✅ **DONE** (v0.0.28)
+2. ~~Fix wipe command status tracking~~ - ✅ **DONE** (v0.0.28)
+3. ~~Critical security fixes~~ - ✅ **DONE** (v0.0.29): Android ID device identification + ownership verification
+4. ~~App deployment system accessibility~~ - ✅ **DONE** (v0.0.28): Made Applications feature accessible in UI
 
-### High Priority (Security)
-3. **Security audit** of all API endpoints and Convex functions (see section 2)
-4. **Implement rate limiting** on device registration and command endpoints
-5. **Add audit logging** for administrative actions
+### High Priority (Security & Reliability)
+1. **Complete security audit** of all API endpoints and Convex functions (see section 2)
+   - Device command endpoints verified ✅
+   - Still need: enrollment, policy management, user management endpoints
+2. **Implement rate limiting** on device registration and command endpoints
+3. **Add audit logging** for administrative actions (who did what when)
+4. **Re-enroll test devices** with new Android ID-based system (breaking change from v0.0.29)
 
 ### Medium Priority (Features)
-6. **App deployment system** - Silent APK installation on managed devices
-7. **Policy enforcement** - Apply device restrictions from web dashboard
-8. **Enhanced device info** - Battery, storage, network, installed apps
-9. **Command history UI** - Show audit trail of all commands sent to devices
+5. **Policy enforcement** - Apply device restrictions from web dashboard
+   - PolicyManager.kt exists but needs implementation
+   - Device restrictions: camera, USB, screenshots, password requirements
+6. **Enhanced device info** - Battery, storage, network, installed apps
+   - Send in heartbeat payload to minimize API calls
+7. **Command history UI** - Show audit trail of all commands sent to devices
+8. **App updates and removal** - Enhance app deployment with update detection
 
 ### Lower Priority (Polish)
-10. **Error handling improvements** - Better error messages throughout
-11. **Dashboard improvements** - Better real-time status indicators
-12. **Documentation** - API documentation, deployment guide, user manual
+9. **Error handling improvements** - Better error messages throughout
+10. **Dashboard improvements** - Better real-time status indicators
+11. **Documentation** - API documentation, deployment guide, user manual
+12. **Backend improvements** - Fix token race condition, policy deletion protection (see TECHNICAL-REVIEW)
 
 ---
 
