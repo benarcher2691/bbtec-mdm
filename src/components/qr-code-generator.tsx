@@ -5,14 +5,6 @@ import { useQuery } from "convex/react"
 import { api } from "../../convex/_generated/api"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { createEnrollmentQRCode, listDevices } from "@/app/actions/enrollment"
 import { QrCode, Copy, Check, AlertCircle, ArrowRight, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -38,8 +30,7 @@ export function QRCodeGenerator() {
   const dpcType = 'bbtec' // Always use BBTec MDM Client
   const pollingInterval = useRef<NodeJS.Timeout | null>(null)
 
-  // Query policies from Convex
-  const policies = useQuery(api.policies.listPolicies)
+  // Query default policy from Convex
   const defaultPolicy = useQuery(api.policies.getDefaultPolicy)
 
   // Set default policy when it loads
@@ -50,11 +41,6 @@ export function QRCodeGenerator() {
   }, [defaultPolicy, selectedPolicyId])
 
   const handleGenerateToken = async () => {
-    if (!selectedPolicyId) {
-      setError('Please select a policy first')
-      return
-    }
-
     setLoading(true)
     setError(null)
     setEnrolledDevice(null)
@@ -154,32 +140,11 @@ export function QRCodeGenerator() {
 
   return (
     <div className="space-y-6">
-      {/* Policy Selection */}
-      <div className="space-y-2">
-        <Label htmlFor="policy-select">Policy</Label>
-        <Select
-          value={selectedPolicyId || undefined}
-          onValueChange={(value) => setSelectedPolicyId(value as Id<"policies">)}
-        >
-          <SelectTrigger id="policy-select" className="w-full md:w-[300px]">
-            <SelectValue placeholder="Select a policy" />
-          </SelectTrigger>
-          <SelectContent>
-            {policies?.map((policy) => (
-              <SelectItem key={policy._id} value={policy._id}>
-                {policy.name}
-                {policy.isDefault && " (Default)"}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       {/* Generate Button */}
       <div className="flex gap-4 items-center">
         <Button
           onClick={handleGenerateToken}
-          disabled={loading || !selectedPolicyId}
+          disabled={loading}
           size="lg"
         >
           {loading ? (
