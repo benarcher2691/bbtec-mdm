@@ -37,9 +37,26 @@ export const registerDevice = mutation({
         manufacturer: args.manufacturer,
         androidVersion: args.androidVersion,
         isDeviceOwner: args.isDeviceOwner,
+        registeredAt: Date.now(), // Update registration timestamp
         ...(args.policyId ? { policyId: args.policyId } : {}),
         ...(args.companyUserId ? { companyUserId: args.companyUserId } : {}),
       })
+
+      // Cancel any pending device commands (wipe/lock/reboot) from previous enrollment
+      // If device is re-registering, it means it survived/was wiped/rebooted, so old commands are stale
+      const pendingCommands = await ctx.db
+        .query("deviceCommands")
+        .withIndex("by_device", (q) => q.eq("deviceId", args.deviceId))
+        .filter((q) => q.eq(q.field("status"), "pending"))
+        .collect()
+
+      for (const command of pendingCommands) {
+        await ctx.db.patch(command._id, {
+          status: "failed",
+          error: "Device re-registered - command cancelled",
+          completedAt: Date.now(),
+        })
+      }
 
       return {
         deviceClientId: existing._id,
