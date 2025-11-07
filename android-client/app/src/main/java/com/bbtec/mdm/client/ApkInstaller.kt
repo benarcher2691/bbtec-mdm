@@ -14,19 +14,30 @@ class ApkInstaller(private val context: Context) {
     private val apiClient = ApiClient(context)
 
     fun installApk(downloadUrl: String, packageName: String, commandId: String) {
+        Log.d(TAG, "═══ APK INSTALLATION STARTED ═══")
+        Log.d(TAG, "Command ID: $commandId")
+        Log.d(TAG, "Package: $packageName")
+        Log.d(TAG, "Download URL: $downloadUrl")
+
         Thread {
             try {
                 // Download APK
+                Log.d(TAG, "Downloading APK from: $downloadUrl")
                 val apkFile = downloadApk(downloadUrl)
+                Log.d(TAG, "✅ Download complete: ${apkFile.absolutePath}, size: ${apkFile.length()} bytes")
 
                 // Install using PackageInstaller
+                Log.d(TAG, "Creating PackageInstaller session...")
                 val packageInstaller = context.packageManager.packageInstaller
                 val params = PackageInstaller.SessionParams(
                     PackageInstaller.SessionParams.MODE_FULL_INSTALL
                 )
 
                 val sessionId = packageInstaller.createSession(params)
+                Log.d(TAG, "Session created with ID: $sessionId")
+
                 val session = packageInstaller.openSession(sessionId)
+                Log.d(TAG, "Session opened, writing APK data...")
 
                 // Write APK to session
                 session.openWrite(packageName, 0, -1).use { output ->
@@ -35,6 +46,7 @@ class ApkInstaller(private val context: Context) {
                     }
                     session.fsync(output)
                 }
+                Log.d(TAG, "✅ APK data written to session")
 
                 // Create intent for installation result
                 val intent = Intent(context, InstallReceiver::class.java).apply {
@@ -48,17 +60,24 @@ class ApkInstaller(private val context: Context) {
                 )
 
                 // Commit session (this triggers installation)
+                Log.d(TAG, "Committing session (starting silent install)...")
                 session.commit(pendingIntent.intentSender)
                 session.close()
+                Log.d(TAG, "✅ Session committed, installation in progress")
 
                 // Clean up
                 apkFile.delete()
+                Log.d(TAG, "Temporary APK file deleted")
 
             } catch (e: Exception) {
-                Log.e("ApkInstaller", "Installation failed", e)
+                Log.e(TAG, "❌ Installation failed for command $commandId", e)
                 apiClient.reportCommandStatus(commandId, "failed", e.message)
             }
         }.start()
+    }
+
+    companion object {
+        private const val TAG = "ApkInstaller"
     }
 
     private fun downloadApk(url: String): File {

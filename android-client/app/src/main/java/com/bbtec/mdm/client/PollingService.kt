@@ -108,11 +108,21 @@ class PollingService : Service() {
                                 }
                             }
                             "wipe" -> {
-                                Log.w(TAG, "WIPE command received - executing factory reset")
-                                apiClient.reportCommandStatus(command.commandId, "executing", null)
-                                val policyManager = PolicyManager(this@PollingService)
-                                policyManager.wipeDevice()
-                                // Note: Device will wipe immediately, no need to report completion
+                                Log.w(TAG, "═══ WIPE COMMAND RECEIVED (background) ═══")
+                                Log.w(TAG, "Reporting 'completed' to backend - waiting for confirmation...")
+
+                                // Report completed and wait for backend confirmation
+                                apiClient.reportCommandStatus(command.commandId, "completed", null) { success ->
+                                    if (success) {
+                                        Log.w(TAG, "✅ Backend confirmed wipe command - EXECUTING FACTORY RESET NOW")
+                                        val policyManager = PolicyManager(this@PollingService)
+                                        policyManager.wipeDevice()
+                                        // Device will wipe immediately after this
+                                    } else {
+                                        Log.e(TAG, "❌ Backend did not confirm - ABORTING wipe for safety")
+                                        Log.e(TAG, "Wipe command will retry on next polling cycle")
+                                    }
+                                }
                             }
                             "lock" -> {
                                 Log.d(TAG, "LOCK command received - locking device")

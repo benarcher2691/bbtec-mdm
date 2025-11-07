@@ -1,9 +1,66 @@
 # BBTec MDM - Roadmap & Next Steps
 
 **Last Updated:** 2025-11-07
-**Current Status:** ✅ Security hardened with Android ID-based device identification, Applications feature accessible, device commands working
+**Current Status:** ✅ Production-ready device commands with callback-based handshake, app installation tested end-to-end, wipe device verified with auto-delete
 
 ## Recent Achievements
+
+### 2025-11-07: Device Commands Production Hardening (v0.0.30-v0.0.33)
+
+**🎯 CRITICAL BUG FIXES - App Installation & Wipe Device Command**
+
+**Problems Identified:**
+- App installation caused "bbtec-mdm Client keeps stopping" crash
+- Serial number showing Android ID due to race condition
+- Wipe command status never reached backend (web UI didn't update)
+- NetworkOnMainThreadException causing silent failures
+
+**Solutions Implemented:**
+- ✅ **v0.0.30: Fixed NetworkOnMainThreadException in ApkInstaller** - Moved network calls to background threads
+- ✅ **v0.0.31: Fixed serial number capture** - Grant READ_PHONE_STATE permission BEFORE device registration
+- ✅ **v0.0.32: Added comprehensive logging** - Enhanced debugging for command processing
+- ✅ **v0.0.33: Callback-based status reporting** - Async .enqueue() with 10s timeouts and confirmation handshake
+
+**Callback Handshake Pattern (v0.0.33):**
+```kotlin
+// Before wiping, wait for backend confirmation
+apiClient.reportCommandStatus(commandId, "completed", null) { success ->
+    if (success) {
+        // Backend confirmed receipt - SAFE TO WIPE
+        policyManager.wipeDevice()
+    } else {
+        // Backend unreachable - ABORT and retry later
+        Log.e(TAG, "Backend did not confirm - ABORTING wipe for safety")
+    }
+}
+```
+
+**Testing Results:**
+- ✅ **App Installation (99MB APK)**: Download → Install → Status reported (HTTP 200)
+- ✅ **Wipe Device**: Backend confirmation → Factory reset → Device auto-deleted → UI updated
+
+**Technical Benefits:**
+- Network operations now asynchronous with proper error handling
+- 10-second timeouts prevent indefinite hangs
+- Wipe command only executes after backend confirmation
+- Serial number race condition eliminated by permission timing
+- Comprehensive logging for production debugging
+
+**Files Modified:**
+- `android-client/app/src/main/java/com/bbtec/mdm/client/ApiClient.kt` - Async callbacks with timeout handling
+- `android-client/app/src/main/java/com/bbtec/mdm/client/ApkInstaller.kt` - Background thread for status reporting
+- `android-client/app/src/main/java/com/bbtec/mdm/client/MainActivity.kt` - Callback-based wipe confirmation
+- `android-client/app/src/main/java/com/bbtec/mdm/client/PollingService.kt` - Callback-based wipe confirmation
+- `android-client/app/src/main/java/com/bbtec/mdm/client/ProvisioningSuccessActivity.kt` - Permission grant timing fix
+
+**Production Readiness:**
+- ✅ No crashes during app installation
+- ✅ Network timeouts handled gracefully
+- ✅ Wipe device tested successfully with auto-delete
+- ✅ Serial number properly captured and displayed
+- ✅ Comprehensive logging for troubleshooting
+
+---
 
 ### 2025-11-07: Security Hardening - Android ID Device Identification (v0.0.29)
 
@@ -349,10 +406,11 @@
 **Android Client:**
 - Kotlin, Android 10+ (API 29+)
 - Device Owner mode (full device control)
-- Current backend version: v0.0.29 (requires re-enrollment with Android ID-based system)
+- Current version: v0.0.33 (production-ready with callback-based status reporting)
 - Signature: `53:CD:0E:1A:9E:3F:3A:38:C6:66:84:2A:98:94:CA:8E:B1:ED:DC:DC:F4:FB:0E:13:10:B3:03:8F:A7:1B:CE:21`
 - Features: Device commands (wipe/lock/reboot), ping interval config, manual sync button, app installation
 - Security: Android ID-based device identification (changes on factory reset)
+- Reliability: Async network operations with 10s timeouts, callback-based wipe confirmation
 
 **Enrollment Flow:**
 1. Admin generates QR code (includes enrollment token, APK download URL)

@@ -92,30 +92,41 @@ class MainActivity : AppCompatActivity() {
                     return@runOnUiThread
                 }
 
-                Log.d(TAG, "Sync: Got ${commands.size} commands")
+                Log.d(TAG, "═══ SYNC: Got ${commands.size} commands ═══")
 
                 // Process commands
                 commands.forEach { command ->
-                    Log.d(TAG, "Sync: Processing command ${command.action}")
+                    Log.d(TAG, "Processing command: action=${command.action}, commandId=${command.commandId}")
                     when (command.action) {
                         "install_apk" -> {
+                            Log.d(TAG, "Install APK command - apkUrl=${command.apkUrl}, packageName=${command.packageName}")
                             command.apkUrl?.let { apkUrl ->
                                 command.packageName?.let { packageName ->
+                                    Log.d(TAG, "Starting ApkInstaller for package: $packageName")
                                     ApkInstaller(this)
                                         .installApk(apkUrl, packageName, command.commandId)
                                 }
-                            }
+                            } ?: Log.e(TAG, "❌ Missing apkUrl or packageName in install_apk command!")
                         }
                         "wipe" -> {
-                            Log.w(TAG, "WIPE command received via sync - executing factory reset")
-                            // Report completed BEFORE wiping so status is saved to backend
-                            apiClient.reportCommandStatus(command.commandId, "completed", null)
-                            // Give the API call time to complete
-                            Thread.sleep(1000)
-                            Log.w(TAG, "Starting factory reset NOW...")
-                            val policyManager = PolicyManager(this)
-                            policyManager.wipeDevice()
-                            // Device will wipe immediately after this
+                            Log.w(TAG, "═══ WIPE COMMAND RECEIVED ═══")
+                            Log.w(TAG, "Reporting 'completed' to backend - waiting for confirmation...")
+
+                            // Report completed and wait for backend confirmation
+                            apiClient.reportCommandStatus(command.commandId, "completed", null) { success ->
+                                runOnUiThread {
+                                    if (success) {
+                                        Log.w(TAG, "✅ Backend confirmed wipe command - EXECUTING FACTORY RESET NOW")
+                                        val policyManager = PolicyManager(this)
+                                        policyManager.wipeDevice()
+                                        // Device will wipe immediately after this
+                                    } else {
+                                        Log.e(TAG, "❌ Backend did not confirm - ABORTING wipe for safety")
+                                        Log.e(TAG, "Wipe command will retry on next sync")
+                                        Toast.makeText(this, "Wipe failed - backend unreachable. Will retry.", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
                         }
                         "lock" -> {
                             Log.d(TAG, "LOCK command received via sync - locking device")

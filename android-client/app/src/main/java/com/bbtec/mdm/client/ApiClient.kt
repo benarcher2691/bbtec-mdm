@@ -6,10 +6,19 @@ import com.google.gson.Gson
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import java.util.concurrent.TimeUnit
 
 class ApiClient(private val context: Context) {
 
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)  // TCP connection timeout
+        .writeTimeout(10, TimeUnit.SECONDS)    // Request send timeout
+        .readTimeout(10, TimeUnit.SECONDS)     // Response read timeout
+        .build()
     private val gson = Gson()
     private val prefsManager = PreferencesManager(context)
 
@@ -90,13 +99,24 @@ class ApiClient(private val context: Context) {
         })
     }
 
-    fun reportCommandStatus(commandId: String, status: String, error: String?) {
+    fun reportCommandStatus(
+        commandId: String,
+        status: String,
+        error: String?,
+        callback: ((Boolean) -> Unit)? = null
+    ) {
         val apiToken = prefsManager.getApiToken()
 
         if (apiToken.isEmpty()) {
-            Log.e("ApiClient", "Cannot report command status: No API token")
+            Log.e(TAG, "Cannot report command status: No API token")
+            callback?.invoke(false)
             return
         }
+
+        Log.d(TAG, "═══ REPORTING COMMAND STATUS ═══")
+        Log.d(TAG, "Command ID: $commandId")
+        Log.d(TAG, "Status: $status")
+        Log.d(TAG, "Error: ${error ?: "none"}")
 
         val json = gson.toJson(mapOf(
             "commandId" to commandId,
@@ -110,7 +130,36 @@ class ApiClient(private val context: Context) {
             .post(json.toRequestBody("application/json".toMediaType()))
             .build()
 
-        client.newCall(request).execute()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onResponse(call: Call, response: Response) {
+                if (response.isSuccessful) {
+                    Log.d(TAG, "✅ Status report successful: HTTP ${response.code}")
+                    callback?.invoke(true)
+                } else {
+                    Log.e(TAG, "❌ Server rejected status report: HTTP ${response.code}")
+                    Log.e(TAG, "Response body: ${response.body?.string()}")
+                    callback?.invoke(false)
+                }
+            }
+
+            override fun onFailure(call: Call, e: IOException) {
+                when (e) {
+                    is SocketTimeoutException ->
+                        Log.e(TAG, "❌ Timeout after 10s - network too slow or unreachable")
+                    is UnknownHostException ->
+                        Log.e(TAG, "❌ DNS failure - cannot resolve server hostname")
+                    is ConnectException ->
+                        Log.e(TAG, "❌ Connection refused - server not reachable")
+                    else ->
+                        Log.e(TAG, "❌ Network error: ${e.message}", e)
+                }
+                callback?.invoke(false)
+            }
+        })
+    }
+
+    companion object {
+        private const val TAG = "ApiClient"
     }
 
     fun updatePingInterval(pingInterval: Int, callback: (Boolean) -> Unit) {
