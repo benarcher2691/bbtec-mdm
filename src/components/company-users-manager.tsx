@@ -120,41 +120,39 @@ export function CompanyUsersManager() {
     }
   }
 
-  if (users === undefined) {
-    return (
-      <div className="rounded-lg border bg-card p-12">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent" />
-          <p className="text-sm text-muted-foreground">Loading users...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (users.length === 0) {
-    return (
-      <div className="rounded-lg border bg-card p-12">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <div className="rounded-full bg-slate-100 p-4">
-            <Users className="h-8 w-8 text-slate-400" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-lg">No Users</h3>
-            <p className="text-sm text-muted-foreground mt-2">
-              Create your first company user to manage device assignments
-            </p>
-          </div>
-          <Button onClick={() => handleOpenDialog()}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add User
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-4">
+    <>
+      {users === undefined && (
+        <div className="rounded-lg border bg-card p-12">
+          <div className="flex flex-col items-center gap-4">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent" />
+            <p className="text-sm text-muted-foreground">Loading users...</p>
+          </div>
+        </div>
+      )}
+
+      {users && users.length === 0 && (
+        <div className="rounded-lg border bg-card p-12">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <div className="rounded-full bg-slate-100 p-4">
+              <Users className="h-8 w-8 text-slate-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg">No Users</h3>
+              <p className="text-sm text-muted-foreground mt-2">
+                Create your first company user to manage device assignments
+              </p>
+            </div>
+            <Button onClick={() => handleOpenDialog()}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add User
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {users && users.length > 0 && (
+        <div className="space-y-4">
       {/* Header */}
       <div className="flex justify-between items-center">
         <p className="text-sm text-muted-foreground">
@@ -236,6 +234,8 @@ export function CompanyUsersManager() {
           </table>
         </div>
       </div>
+        </div>
+      )}
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -315,6 +315,6 @@ export function CompanyUsersManager() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   )
 }
