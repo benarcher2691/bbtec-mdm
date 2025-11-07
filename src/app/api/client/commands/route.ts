@@ -16,19 +16,34 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const commands = await convex.query(api.deviceClients.getPendingCommands, {
+    // Get both install commands AND device commands (wipe/lock/reboot)
+    const installCommands = await convex.query(api.deviceClients.getPendingCommands, {
       deviceId: auth.device.deviceId,
     })
 
-    // Format for Android client
-    const formattedCommands = commands.map(cmd => ({
+    const deviceCommands = await convex.query(api.deviceCommands.getPendingCommands, {
+      deviceId: auth.device.deviceId,
+    })
+
+    // Format install commands
+    const formattedInstallCommands = installCommands.map(cmd => ({
       commandId: cmd._id,
       action: 'install_apk',
       apkUrl: cmd.apkUrl,
       packageName: cmd.packageName,
     }))
 
-    return NextResponse.json({ commands: formattedCommands })
+    // Format device commands (wipe, lock, reboot, etc.)
+    const formattedDeviceCommands = deviceCommands.map(cmd => ({
+      commandId: cmd._id,
+      action: cmd.commandType, // "wipe", "lock", "reboot", "update_policy"
+      parameters: cmd.parameters,
+    }))
+
+    // Combine both types of commands
+    const allCommands = [...formattedInstallCommands, ...formattedDeviceCommands]
+
+    return NextResponse.json({ commands: allCommands })
   } catch (error) {
     console.error('Get commands error:', error)
     return NextResponse.json(
