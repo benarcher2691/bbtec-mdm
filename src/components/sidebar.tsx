@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ChevronDown, ChevronRight, Smartphone, QrCode, Package, Home, Download, Settings, Users } from "lucide-react"
+import { ChevronDown, ChevronRight, Smartphone, QrCode, Package, Home, Download, Settings, Users, ScrollText } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -38,6 +38,7 @@ const navigationSections: NavSection[] = [
     items: [
       { title: "Devices", href: "/management/devices", icon: Smartphone },
       { title: "Configuration profiles", href: "/management/configuration-profiles", icon: Settings },
+      { title: "Action log", href: "/management/action-log", icon: ScrollText },
     ],
   },
   {
