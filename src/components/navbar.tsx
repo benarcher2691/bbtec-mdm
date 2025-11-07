@@ -43,7 +43,7 @@ export function Navbar() {
         </Sheet>
 
         {/* Branding */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-baseline gap-2">
           <span className="text-lg font-semibold">bbtec-mdm</span>
           <span className="text-xs text-muted-foreground">v{packageJson.version}</span>
         </div>
