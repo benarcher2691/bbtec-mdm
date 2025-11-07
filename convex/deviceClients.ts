@@ -29,10 +29,17 @@ export const registerDevice = mutation({
       // Update existing device registration
       const apiToken = existing.apiToken || crypto.randomUUID()
 
+      // IMPORTANT: Update userId if it's different (handles re-enrollment with different user)
+      // This is a safety check - normally wiped devices are deleted before re-enrollment
+      const userId = args.userId || existing.userId
+
       await ctx.db.patch(existing._id, {
         lastHeartbeat: Date.now(),
         status: "online",
         apiToken,
+        userId, // Update userId if provided (re-enrollment with different user)
+        serialNumber: args.serialNumber, // Update serial number (fixes regression from pre-v0.0.24)
+        androidId: args.androidId, // Update Android ID as well for consistency
         model: args.model,
         manufacturer: args.manufacturer,
         androidVersion: args.androidVersion,

@@ -108,10 +108,14 @@ class MainActivity : AppCompatActivity() {
                         }
                         "wipe" -> {
                             Log.w(TAG, "WIPE command received via sync - executing factory reset")
-                            apiClient.reportCommandStatus(command.commandId, "executing", null)
+                            // Report completed BEFORE wiping so status is saved to backend
+                            apiClient.reportCommandStatus(command.commandId, "completed", null)
+                            // Give the API call time to complete
+                            Thread.sleep(1000)
+                            Log.w(TAG, "Starting factory reset NOW...")
                             val policyManager = PolicyManager(this)
                             policyManager.wipeDevice()
-                            // Device will wipe immediately
+                            // Device will wipe immediately after this
                         }
                         "lock" -> {
                             Log.d(TAG, "LOCK command received via sync - locking device")

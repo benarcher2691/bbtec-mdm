@@ -76,6 +76,27 @@ export const updateCommandStatus = mutation({
     }
 
     await ctx.db.patch(args.commandId, updates)
+
+    // Auto-delete device when wipe command completes
+    // This ensures:
+    // 1. Device disappears from UI immediately
+    // 2. Re-enrollment creates fresh record (no inherited settings)
+    // 3. No orphaned wiped devices in database
+    if (args.status === "completed") {
+      const command = await ctx.db.get(args.commandId)
+
+      if (command && command.commandType === "wipe") {
+        // Find and delete the device
+        const device = await ctx.db
+          .query("deviceClients")
+          .withIndex("by_device", (q) => q.eq("deviceId", command.deviceId))
+          .first()
+
+        if (device) {
+          await ctx.db.delete(device._id)
+        }
+      }
+    }
   },
 })
 

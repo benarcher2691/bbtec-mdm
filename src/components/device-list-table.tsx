@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useQuery, useMutation } from "convex/react"
 import { api } from "../../convex/_generated/api"
 import { Button } from "@/components/ui/button"
@@ -28,6 +28,16 @@ export function DeviceListTable() {
 
   const deviceId = searchParams.get('device')
   const selectedDevice = devices?.find(d => d.deviceId === deviceId) || null
+
+  // Auto-navigate back to device list when selected device is deleted
+  // This happens when wipe command completes and device is auto-removed
+  useEffect(() => {
+    if (deviceId && devices && !selectedDevice) {
+      // User was viewing a specific device, but it no longer exists
+      // Navigate back to device list
+      router.push('/management/devices')
+    }
+  }, [deviceId, devices, selectedDevice, router])
 
   // Get pending commands for selected device
   const commandHistory = useQuery(
