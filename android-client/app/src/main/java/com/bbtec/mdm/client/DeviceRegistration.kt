@@ -174,6 +174,7 @@ class DeviceRegistration(private val context: Context) {
             "enrollmentId" to enrollmentId,     // Primary key for enrollment
             "ssaId" to ssaId,                   // For device matching across enrollments
             "serialNumber" to serialNumber,     // Hardware serial or "0" sentinel
+            "androidId" to ssaId,               // Legacy field for UI backward compatibility (same as ssaId)
             "model" to Build.MODEL,
             "manufacturer" to Build.MANUFACTURER,
             "brand" to Build.BRAND,
