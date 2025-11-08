@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useQuery } from "convex/react"
 import { api } from "../../convex/_generated/api"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { createEnrollmentQRCode, listDevices } from "@/app/actions/enrollment"
+import { createEnrollmentQRCode } from "@/app/actions/enrollment"
 import { QrCode, Copy, Check, AlertCircle, ArrowRight, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { Id } from "../../convex/_generated/dataModel"
@@ -31,17 +31,20 @@ export function QRCodeGenerator() {
   const [error, setError] = useState<string | null>(null)
   const [tokenData, setTokenData] = useState<EnrollmentToken | null>(null)
   const [copied, setCopied] = useState(false)
-  const [enrolledDevice, setEnrolledDevice] = useState<any | null>(null)
-  const [waitingForEnrollment, setWaitingForEnrollment] = useState(false)
-  const [deviceCountBefore, setDeviceCountBefore] = useState(0)
+  const [currentTokenId, setCurrentTokenId] = useState<Id<"enrollmentTokens"> | null>(null)
   const [selectedPolicyId, setSelectedPolicyId] = useState<Id<"policies"> | null>(null)
   const [selectedCompanyUserId, setSelectedCompanyUserId] = useState<Id<"companyUsers"> | null>(null)
   const dpcType = 'bbtec' // Always use BBTec MDM Client
-  const pollingInterval = useRef<NodeJS.Timeout | null>(null)
 
   // Query default policy and company users from Convex
   const defaultPolicy = useQuery(api.policies.getDefaultPolicy)
   const companyUsers = useQuery(api.companyUsers.listCompanyUsers)
+
+  // Reactively check token status (only when we have a token)
+  const tokenStatus = useQuery(
+    api.enrollmentTokens.checkTokenStatus,
+    currentTokenId ? { tokenId: currentTokenId } : "skip"
+  )
 
   // Set default policy when it loads
   useEffect(() => {
@@ -49,6 +52,15 @@ export function QRCodeGenerator() {
       setSelectedPolicyId(defaultPolicy._id)
     }
   }, [defaultPolicy, selectedPolicyId])
+
+  // Watch for token being used (reactive!)
+  useEffect(() => {
+    if (tokenStatus?.used && tokenStatus.device && currentTokenId) {
+      // Token has been used - device enrolled!
+      setCurrentTokenId(null) // Stop polling
+      setTokenData(null) // Hide QR code
+    }
+  }, [tokenStatus, currentTokenId])
 
   const handleGenerateToken = async () => {
     if (!selectedCompanyUserId) {
@@ -63,21 +75,15 @@ export function QRCodeGenerator() {
 
     setLoading(true)
     setError(null)
-    setEnrolledDevice(null)
+    setCurrentTokenId(null) // Reset previous token
 
     try {
-      // Get current device count
-      const devicesResult = await listDevices()
-      if (devicesResult.success) {
-        setDeviceCountBefore(devicesResult.devices.length)
-      }
-
       const result = await createEnrollmentQRCode(selectedPolicyId, 3600, false, dpcType, selectedCompanyUserId)
 
       console.log('[QR GEN CLIENT] Full result:', result)
       console.log('[QR GEN CLIENT] Debug object:', result.debug)
 
-      if (result.success) {
+      if (result.success && result.tokenId) {
         setTokenData({
           token: result.token || '',
           qrCode: result.qrCode || '',
@@ -85,9 +91,8 @@ export function QRCodeGenerator() {
           apkVersion: result.apkVersion,
         })
 
-        // Start polling for new device enrollment
-        setWaitingForEnrollment(true)
-        startPollingForEnrollment()
+        // Start watching this token for enrollment (reactive!)
+        setCurrentTokenId(result.tokenId)
       } else {
         setError(result.error || 'Failed to create enrollment QR code')
       }
@@ -98,51 +103,14 @@ export function QRCodeGenerator() {
     }
   }
 
-  const startPollingForEnrollment = () => {
-    // Clear any existing interval
-    if (pollingInterval.current) {
-      clearInterval(pollingInterval.current)
-    }
-
-    // Poll every 5 seconds for new devices
-    pollingInterval.current = setInterval(async () => {
-      try {
-        const result = await listDevices()
-        if (result.success && result.devices.length > deviceCountBefore) {
-          // New device enrolled!
-          const newDevice = result.devices[result.devices.length - 1]
-          setEnrolledDevice(newDevice)
-          setWaitingForEnrollment(false)
-
-          // Stop polling
-          if (pollingInterval.current) {
-            clearInterval(pollingInterval.current)
-            pollingInterval.current = null
-          }
-        }
-      } catch (err) {
-        console.error('Error polling for devices:', err)
-      }
-    }, 5000)
-  }
-
   const handleGoToDevice = () => {
     // Navigate to device detail page
-    if (enrolledDevice?.deviceId) {
-      router.push(`/management/devices?device=${enrolledDevice.deviceId}`)
+    if (tokenStatus?.device?.deviceId) {
+      router.push(`/management/devices?device=${tokenStatus.device.deviceId}`)
     } else {
       router.push('/management/devices')
     }
   }
-
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollingInterval.current) {
-        clearInterval(pollingInterval.current)
-      }
-    }
-  }, [])
 
   const handleCopyToken = async () => {
     if (tokenData?.token) {
@@ -220,17 +188,17 @@ export function QRCodeGenerator() {
       )}
 
       {/* Device Enrolled Success */}
-      {enrolledDevice && (
+      {tokenStatus?.used && tokenStatus.device && (
         <div className="rounded-lg border border-green-200 bg-green-50 p-6">
           <div className="flex items-start gap-3 mb-4">
             <Check className="h-6 w-6 text-green-600 mt-0.5" />
             <div className="flex-1">
               <h3 className="font-semibold text-green-900 text-lg">Device Enrolled Successfully!</h3>
               <p className="text-sm text-green-700 mt-1">
-                {enrolledDevice.model || 'A device'} has been enrolled and is now being managed.
+                {tokenStatus.device.model || 'A device'} has been enrolled and is now being managed.
               </p>
               <p className="text-xs text-green-600 mt-1 font-mono">
-                Serial: {enrolledDevice.serialNumber}
+                Serial: {tokenStatus.device.serialNumber}
               </p>
             </div>
           </div>
@@ -242,7 +210,7 @@ export function QRCodeGenerator() {
       )}
 
       {/* Waiting for Enrollment */}
-      {waitingForEnrollment && !enrolledDevice && (
+      {currentTokenId && tokenData && !tokenStatus?.used && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
           <div className="flex items-center gap-3">
             <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
@@ -257,7 +225,7 @@ export function QRCodeGenerator() {
       )}
 
       {/* QR Code Display */}
-      {tokenData && !enrolledDevice && (
+      {tokenData && !tokenStatus?.used && (
         <div className="rounded-lg border bg-card p-6">
           <h3 className="text-lg font-semibold mb-4">Enrollment QR Code</h3>
 

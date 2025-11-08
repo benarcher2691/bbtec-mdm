@@ -154,6 +154,7 @@ export async function createEnrollmentQRCode(
 
     return {
       success: true,
+      tokenId,
       token: token.token,
       qrCode: qrCodeDataUrl,
       expirationTimestamp: new Date(token.expiresAt).toISOString(),

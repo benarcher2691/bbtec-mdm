@@ -157,6 +157,39 @@ export const listTokens = query({
 })
 
 /**
+ * Check if a token has been used and return the enrolled device info
+ * Used by QR code generator to poll for enrollment completion
+ */
+export const checkTokenStatus = query({
+  args: { tokenId: v.id("enrollmentTokens") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) throw new Error("Unauthenticated")
+
+    const token = await ctx.db.get(args.tokenId)
+    if (!token || token.userId !== identity.subject) {
+      throw new Error("Unauthorized")
+    }
+
+    if (!token.used || !token.usedByDeviceId) {
+      return { used: false }
+    }
+
+    // Token has been used - get the enrolled device
+    const device = await ctx.db
+      .query("deviceClients")
+      .withIndex("by_device", (q) => q.eq("deviceId", token.usedByDeviceId))
+      .first()
+
+    return {
+      used: true,
+      usedAt: token.usedAt,
+      device: device || null,
+    }
+  },
+})
+
+/**
  * Delete an enrollment token
  */
 export const deleteToken = mutation({
