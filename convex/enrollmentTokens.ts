@@ -176,9 +176,10 @@ export const checkTokenStatus = query({
     }
 
     // Token has been used - get the enrolled device
+    // usedByDeviceId is guaranteed to exist here due to the check above
     const device = await ctx.db
       .query("deviceClients")
-      .withIndex("by_device", (q) => q.eq("deviceId", token.usedByDeviceId))
+      .withIndex("by_device", (q) => q.eq("deviceId", token.usedByDeviceId!))
       .first()
 
     return {
