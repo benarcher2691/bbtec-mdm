@@ -213,12 +213,12 @@ export const resolveDevice = mutation({
 
     // 3) No match found - create new device
     const newDeviceId = await ctx.db.insert("devices", {
-      ssaId: ssaId || null,
-      serialNumber: isValidSerial(serialNumber, ssaId) ? serialNumber! : null,
+      ssaId: ssaId || undefined,
+      serialNumber: isValidSerial(serialNumber, ssaId) ? serialNumber! : undefined,
       brand,
       model,
       manufacturer,
-      buildFingerprint: buildFingerprint || null,
+      buildFingerprint: buildFingerprint || undefined,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
