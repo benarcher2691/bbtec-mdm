@@ -56,13 +56,41 @@ export default defineSchema({
   }).index("by_user", ["userId"])
     .index("by_package", ["packageName"]),
 
+  // Physical devices (survives factory reset and re-enrollment)
+  devices: defineTable({
+    // Device matching IDs
+    ssaId: v.optional(v.string()),         // App-scoped ANDROID_ID (primary matcher)
+    serialNumber: v.optional(v.string()),  // Hardware serial or "0" sentinel (secondary matcher)
+
+    // Device metadata
+    brand: v.string(),
+    model: v.string(),
+    manufacturer: v.string(),
+    buildFingerprint: v.optional(v.string()), // Build.FINGERPRINT from first enrollment
+
+    // Timestamps
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_ssaid", ["ssaId"])
+    .index("by_serial", ["serialNumber"]),
+
   // Registered client devices (NOW: Full device data, our DPC is Device Owner)
+  // This table represents ENROLLMENTS - a device can be enrolled multiple times
   deviceClients: defineTable({
-    deviceId: v.string(),              // NOW: Hardware serial number (from Build.getSerial())
+    // Enrollment identifiers (v0.0.34+: three separate IDs, never mixed!)
+    enrollmentId: v.optional(v.string()),    // DPM.enrollmentSpecificId (unique per enrollment)
+    ssaId: v.optional(v.string()),           // App-scoped ANDROID_ID (for device matching)
+    serialNumber: v.optional(v.string()),    // Hardware serial or "0" sentinel
+
+    // Legacy fields (keep for backward compatibility with older enrollments)
+    deviceId: v.string(),              // Legacy: Was serial number, now enrollmentId
+    androidId: v.optional(v.string()), // Legacy: Old Android ID field
+
+    // Link to physical device
+    physicalDeviceId: v.optional(v.id("devices")), // FK to devices table
+
     userId: v.string(),                // Clerk user who owns device
     companyUserId: v.optional(v.id("companyUsers")), // Company user assignment
-    serialNumber: v.string(),          // Hardware serial (primary identifier)
-    androidId: v.string(),             // Android ID (backup identifier)
     model: v.string(),
     manufacturer: v.string(),
     androidVersion: v.string(),
@@ -76,10 +104,12 @@ export default defineSchema({
     isDeviceOwner: v.boolean(),        // Confirm our DPC is Device Owner
     apiToken: v.string(),              // Authentication token for device API calls
   }).index("by_device", ["deviceId"])
+    .index("by_enrollment_id", ["enrollmentId"])
     .index("by_serial", ["serialNumber"])
     .index("by_user", ["userId"])
     .index("by_token", ["apiToken"])
-    .index("by_company_user", ["companyUserId"]),
+    .index("by_company_user", ["companyUserId"])
+    .index("by_physical_device", ["physicalDeviceId"]),
 
   // Installation command queue
   installCommands: defineTable({

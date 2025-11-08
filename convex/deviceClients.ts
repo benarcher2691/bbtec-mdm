@@ -2,14 +2,18 @@ import { v } from "convex/values"
 import { mutation, query } from "./_generated/server"
 
 /**
- * Register a new device client (NEW: Device Owner model)
+ * Register a new device client (v0.0.34+: Two-table architecture)
  * Now we store full device metadata since we ARE the Device Owner
+ * v0.0.34+ sends enrollmentId, ssaId, serialNumber separately (never mixed!)
  */
 export const registerDevice = mutation({
   args: {
-    deviceId: v.string(),         // Serial number (primary)
-    serialNumber: v.string(),
-    androidId: v.string(),
+    deviceId: v.string(),         // Primary key: enrollmentId (v0.0.34+) or androidId (legacy)
+    enrollmentId: v.optional(v.string()),  // v0.0.34+: DPM.enrollmentSpecificId
+    ssaId: v.optional(v.string()),         // v0.0.34+: App-scoped ANDROID_ID
+    serialNumber: v.optional(v.string()),  // v0.0.34+: Hardware serial or "0" sentinel
+    androidId: v.optional(v.string()),     // Legacy field for backward compatibility
+    physicalDeviceId: v.optional(v.id("devices")), // v0.0.34+: FK to physical device
     model: v.string(),
     manufacturer: v.string(),
     androidVersion: v.string(),
@@ -19,11 +23,12 @@ export const registerDevice = mutation({
     companyUserId: v.optional(v.id("companyUsers")), // Optional, company user assignment
   },
   handler: async (ctx, args) => {
-    // Check if device already registered (by Android ID)
-    // Android ID changes on factory reset, ensuring each enrollment is fresh
+    // Check if device already registered (by deviceId = enrollmentId or androidId)
+    // v0.0.34+: enrollmentId is unique per enrollment, won't find existing
+    // Legacy: androidId changes on factory reset, ensuring each enrollment is fresh
     const existing = await ctx.db
       .query("deviceClients")
-      .withIndex("by_device", (q) => q.eq("deviceId", args.androidId))
+      .withIndex("by_device", (q) => q.eq("deviceId", args.deviceId))
       .first()
 
     if (existing) {
@@ -39,8 +44,11 @@ export const registerDevice = mutation({
         status: "online",
         apiToken,
         userId, // Update userId if provided (re-enrollment with different user)
-        serialNumber: args.serialNumber, // Update serial number (fixes regression from pre-v0.0.24)
-        androidId: args.androidId, // Update Android ID as well for consistency
+        enrollmentId: args.enrollmentId || existing.enrollmentId,
+        ssaId: args.ssaId || existing.ssaId,
+        serialNumber: args.serialNumber || existing.serialNumber,
+        androidId: args.androidId || existing.androidId,
+        physicalDeviceId: args.physicalDeviceId || existing.physicalDeviceId,
         model: args.model,
         manufacturer: args.manufacturer,
         androidVersion: args.androidVersion,
@@ -84,10 +92,13 @@ export const registerDevice = mutation({
 
     // New registration
     const deviceClientId = await ctx.db.insert("deviceClients", {
-      deviceId: args.androidId,        // Use Android ID as primary ID (changes on factory reset)
+      deviceId: args.deviceId,         // enrollmentId (v0.0.34+) or androidId (legacy)
       userId,
-      serialNumber: args.serialNumber,  // Keep serial for admin reference
-      androidId: args.androidId,
+      enrollmentId: args.enrollmentId || undefined,
+      ssaId: args.ssaId || undefined,
+      serialNumber: args.serialNumber || undefined,
+      androidId: args.androidId || undefined,
+      physicalDeviceId: args.physicalDeviceId || undefined,
       model: args.model,
       manufacturer: args.manufacturer,
       androidVersion: args.androidVersion,

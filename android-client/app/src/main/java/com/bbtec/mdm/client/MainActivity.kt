@@ -1,6 +1,10 @@
 package com.bbtec.mdm.client
 
+import android.app.admin.DevicePolicyManager
+import android.content.Context
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.widget.Button
 import android.widget.EditText
@@ -19,6 +23,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var pingIntervalInput: EditText
     private lateinit var savePingIntervalButton: Button
     private lateinit var pingIntervalStatusText: TextView
+    private lateinit var enrollmentIdText: TextView
+    private lateinit var ssaIdText: TextView
+    private lateinit var serialNumberText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,6 +41,9 @@ class MainActivity : AppCompatActivity() {
         pingIntervalInput = findViewById(R.id.pingIntervalInput)
         savePingIntervalButton = findViewById(R.id.savePingIntervalButton)
         pingIntervalStatusText = findViewById(R.id.pingIntervalStatusText)
+        enrollmentIdText = findViewById(R.id.enrollmentIdText)
+        ssaIdText = findViewById(R.id.ssaIdText)
+        serialNumberText = findViewById(R.id.serialNumberText)
 
         // Set up sync button
         syncButton.setOnClickListener {
@@ -222,6 +232,66 @@ class MainActivity : AppCompatActivity() {
             "Unknown"
         }
         versionText.text = "Version: $versionName"
+
+        // Update device identifiers
+        updateDeviceIdentifiers()
+    }
+
+    private fun updateDeviceIdentifiers() {
+        // Get DevicePolicyManager for enrollment ID
+        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+
+        // Get stable enrollment ID (unique per enrollment, survives app reinstall)
+        val enrollmentId = try {
+            dpm.enrollmentSpecificId ?: "Not available (not Device Owner)"
+        } catch (e: Exception) {
+            "Error: ${e.message}"
+        }
+
+        // Get app-scoped Android ID (SSAID - stable for this app+device+user)
+        val ssaId = try {
+            Settings.Secure.getString(
+                contentResolver,
+                Settings.Secure.ANDROID_ID
+            ) ?: "Not available"
+        } catch (e: Exception) {
+            "Error: ${e.message}"
+        }
+
+        // Get hardware serial number (NEVER fall back to androidId!)
+        val serialNumber = try {
+            val serial = Build.getSerial()
+
+            // Validate it's a real serial, not a placeholder or androidId collision
+            when {
+                serial == ssaId -> {
+                    "0 (collision with SSAID)"
+                }
+                serial == "unknown" || serial.isEmpty() -> {
+                    "0 (placeholder: '$serial')"
+                }
+                serial.matches(Regex("^[0-9a-fA-F]{16}$")) -> {
+                    "0 (looks like Android ID)"
+                }
+                else -> {
+                    serial
+                }
+            }
+        } catch (e: SecurityException) {
+            "0 (READ_PHONE_STATE denied)"
+        } catch (e: Exception) {
+            "Error: ${e.message}"
+        }
+
+        // Update TextViews
+        enrollmentIdText.text = "Enrollment ID: $enrollmentId"
+        ssaIdText.text = "SSAID (App Android ID): $ssaId"
+        serialNumberText.text = "Serial Number: $serialNumber"
+
+        Log.d(TAG, "═══ DEVICE IDENTIFIERS (UI Display) ═══")
+        Log.d(TAG, "Enrollment ID: $enrollmentId")
+        Log.d(TAG, "SSAID: $ssaId")
+        Log.d(TAG, "Serial Number: $serialNumber")
     }
 
     private fun formatTime(timestamp: Long): String {

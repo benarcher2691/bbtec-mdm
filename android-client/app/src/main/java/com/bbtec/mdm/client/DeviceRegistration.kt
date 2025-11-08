@@ -108,66 +108,68 @@ class DeviceRegistration(private val context: Context) {
         val adminComponent = ComponentName(context, MdmDeviceAdminReceiver::class.java)
         val isDeviceOwner = dpm.isDeviceOwnerApp(context.packageName)
 
-        // Get Android ID first (always available, never requires permission)
-        val androidId = Settings.Secure.getString(
+        // Get stable enrollment ID (unique per enrollment, survives app reinstall)
+        val enrollmentId = dpm.enrollmentSpecificId
+        Log.e(TAG, "Enrollment ID (DPM): $enrollmentId")
+
+        // Get app-scoped Android ID (SSAID - stable for this app+device+user)
+        // This is what the app sees - different from base Android ID shown by adb!
+        val ssaId = Settings.Secure.getString(
             context.contentResolver,
             Settings.Secure.ANDROID_ID
         )
+        Log.e(TAG, "SSAID (app-scoped Android ID): $ssaId")
 
-        // Get hardware serial number with retry logic
-        // DEFENSE: If serialNumber == androidId, it means Build.getSerial() threw SecurityException
-        // and we fell back to androidId. This is a BUG - retry to get the real serial number.
-        val delays = listOf(0L, 100L, 300L, 500L)
-        var serialNumber = ""
+        // Get hardware serial number (NEVER fall back to androidId!)
+        val serialNumber = try {
+            val serial = Build.getSerial()
+            Log.d(TAG, "Build.getSerial() returned: $serial")
 
-        for ((attempt, delay) in delays.withIndex()) {
-            if (delay > 0) {
-                Log.w(TAG, "⏳ Retry attempt ${attempt + 1}/${delays.size} to get serial number (waiting ${delay}ms)...")
-                Thread.sleep(delay)
-            }
-
-            serialNumber = try {
-                val serial = Build.getSerial()
-                Log.d(TAG, "✅ Got hardware serial via Build.getSerial(): $serial")
-                serial
-            } catch (e: SecurityException) {
-                // Fallback to ANDROID_ID if serial number is not accessible
-                Log.w(TAG, "❌ Cannot access serial number (READ_PHONE_STATE not granted?), falling back to ANDROID_ID", e)
-                androidId
-            }
-
-            // VALIDATION: Check if we got a valid serial number (different from Android ID)
-            if (serialNumber != androidId) {
-                if (attempt > 0) {
-                    Log.d(TAG, "✅ Got valid serial number after ${attempt + 1} attempts")
+            // Validate it's a real serial, not a placeholder or androidId collision
+            when {
+                serial == ssaId -> {
+                    Log.w(TAG, "⚠️ Serial equals SSAID - collision detected, using sentinel")
+                    "0"
                 }
-                break
-            } else {
-                Log.w(TAG, "⚠️ Attempt ${attempt + 1}/${delays.size}: Serial number equals Android ID (permission not ready)")
-                if (attempt == delays.size - 1) {
-                    // Last attempt failed - use sentinel value
-                    serialNumber = "0"
-                    Log.e(TAG, "❌ Failed to get valid serial number after ${delays.size} attempts (${delays.sum()}ms total)")
-                    Log.e(TAG, "Reporting serial number as '0' (permission failure sentinel - easy to detect)")
+                serial == "unknown" || serial.isEmpty() -> {
+                    Log.w(TAG, "⚠️ Serial is placeholder ('$serial'), using sentinel")
+                    "0"
+                }
+                serial.matches(Regex("^[0-9a-fA-F]{16}$")) -> {
+                    Log.w(TAG, "⚠️ Serial looks like Android ID (16 hex chars), using sentinel")
+                    "0"
+                }
+                else -> {
+                    Log.d(TAG, "✅ Valid hardware serial: $serial")
+                    serial
                 }
             }
+        } catch (e: SecurityException) {
+            Log.w(TAG, "❌ SecurityException accessing serial (READ_PHONE_STATE not granted), using sentinel", e)
+            "0"
         }
 
-        Log.e(TAG, "Final serial number: $serialNumber")
-        Log.e(TAG, "Android ID: $androidId")
+        Log.e(TAG, "═══ DEVICE IDENTIFIERS ═══")
+        Log.e(TAG, "Enrollment ID: $enrollmentId")
+        Log.e(TAG, "SSAID: $ssaId")
+        Log.e(TAG, "Serial Number: $serialNumber")
         Log.e(TAG, "Is Device Owner: $isDeviceOwner")
         Log.e(TAG, "Model: ${Build.MODEL}")
         Log.e(TAG, "Manufacturer: ${Build.MANUFACTURER}")
         Log.e(TAG, "Android version: ${Build.VERSION.RELEASE}")
+        Log.e(TAG, "Build fingerprint: ${Build.FINGERPRINT}")
 
-        // Build registration request
+        // Build registration request - send ALL THREE IDs separately (NEVER mix them!)
         val requestData = mapOf(
             "enrollmentToken" to enrollmentToken,
-            "serialNumber" to serialNumber,
-            "androidId" to androidId,
+            "enrollmentId" to enrollmentId,     // Primary key for enrollment
+            "ssaId" to ssaId,                   // For device matching across enrollments
+            "serialNumber" to serialNumber,     // Hardware serial or "0" sentinel
             "model" to Build.MODEL,
             "manufacturer" to Build.MANUFACTURER,
+            "brand" to Build.BRAND,
             "androidVersion" to Build.VERSION.RELEASE,
+            "buildFingerprint" to Build.FINGERPRINT,
             "isDeviceOwner" to isDeviceOwner
         )
 
@@ -202,10 +204,11 @@ class DeviceRegistration(private val context: Context) {
                         Log.e(TAG, "API token length: ${result.apiToken.length}")
                         Log.e(TAG, "API token: ${if (result.apiToken.length > 12) result.apiToken.take(12) + "..." else result.apiToken}")
 
-                        prefsManager.setDeviceId(serialNumber)
+                        // Store enrollmentId as primary device identifier (not serialNumber!)
+                        prefsManager.setDeviceId(enrollmentId)
                         prefsManager.setApiToken(result.apiToken)
                         prefsManager.setRegistered(true)
-                        Log.e(TAG, "✅ Device ID and API token saved to preferences!")
+                        Log.e(TAG, "✅ Enrollment ID and API token saved to preferences!")
                         Log.e(TAG, "✅ Registration flag set to true!")
 
                         // Send immediate heartbeat
