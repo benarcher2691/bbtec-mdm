@@ -129,34 +129,9 @@ class DeviceRegistration(private val context: Context) {
         )
         Log.e(TAG, "SSAID (app-scoped Android ID): $ssaId")
 
-        // Get hardware serial number (NEVER fall back to androidId!)
-        val serialNumber = try {
-            val serial = Build.getSerial()
-            Log.d(TAG, "Build.getSerial() returned: $serial")
-
-            // Validate it's a real serial, not a placeholder or androidId collision
-            when {
-                serial == ssaId -> {
-                    Log.w(TAG, "⚠️ Serial equals SSAID - collision detected, using sentinel")
-                    "0"
-                }
-                serial == "unknown" || serial.isEmpty() -> {
-                    Log.w(TAG, "⚠️ Serial is placeholder ('$serial'), using sentinel")
-                    "0"
-                }
-                serial.matches(Regex("^[0-9a-fA-F]{16}$")) -> {
-                    Log.w(TAG, "⚠️ Serial looks like Android ID (16 hex chars), using sentinel")
-                    "0"
-                }
-                else -> {
-                    Log.d(TAG, "✅ Valid hardware serial: $serial")
-                    serial
-                }
-            }
-        } catch (e: SecurityException) {
-            Log.w(TAG, "❌ SecurityException accessing serial (READ_PHONE_STATE not granted), using sentinel", e)
-            "0"
-        }
+        // Get hardware serial number using centralized helper
+        // Helper handles permission grant, polling, and validation
+        val serialNumber = SerialNumberHelper.readSerialSafely(context) ?: "0"
 
         Log.e(TAG, "═══ DEVICE IDENTIFIERS ═══")
         Log.e(TAG, "Enrollment ID: $enrollmentId")

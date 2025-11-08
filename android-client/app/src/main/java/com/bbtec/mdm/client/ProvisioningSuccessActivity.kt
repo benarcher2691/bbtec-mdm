@@ -31,53 +31,10 @@ class ProvisioningSuccessActivity : Activity() {
         if (isDeviceOwner) {
             Log.d(TAG, "✅ Device Owner mode confirmed!")
 
-            // IMPORTANT: Grant READ_PHONE_STATE permission NOW, before device registration
-            // This ensures Build.getSerial() works during registration
-            // On Android 8.0+, registration happens HERE, not in onEnabled()
-            try {
-                val adminComponent = android.content.ComponentName(this, MdmDeviceAdminReceiver::class.java)
-                val grantState = dpm.setPermissionGrantState(
-                    adminComponent,
-                    packageName,
-                    android.Manifest.permission.READ_PHONE_STATE,
-                    DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
-                )
-                Log.d(TAG, "✅ Granted READ_PHONE_STATE (grant state: $grantState)")
-
-                // FIX: Permission grant via setPermissionGrantState() doesn't take effect instantly
-                // RACE CONDITION: Calling Build.getSerial() immediately causes SecurityException fallback to Android ID
-                // SOLUTION: Retry with progressive delays (0, 100, 300, 500ms) until permission is effective
-                val delays = listOf(0L, 100L, 300L, 500L)
-                var permissionReady = false
-
-                for ((attempt, delay) in delays.withIndex()) {
-                    if (delay > 0) {
-                        Thread.sleep(delay)
-                    }
-
-                    val hasPermission = checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) ==
-                            android.content.pm.PackageManager.PERMISSION_GRANTED
-
-                    if (hasPermission) {
-                        permissionReady = true
-                        if (attempt == 0) {
-                            Log.d(TAG, "✅ READ_PHONE_STATE ready immediately")
-                        } else {
-                            Log.d(TAG, "✅ READ_PHONE_STATE ready after ${delays.take(attempt + 1).sum()}ms (attempt ${attempt + 1})")
-                        }
-                        break
-                    } else {
-                        Log.w(TAG, "⏳ Attempt ${attempt + 1}/${delays.size}: READ_PHONE_STATE not yet effective")
-                    }
-                }
-
-                if (!permissionReady) {
-                    Log.e(TAG, "❌ READ_PHONE_STATE never became effective after ${delays.size} attempts (${delays.sum()}ms total)")
-                    Log.e(TAG, "Device will report serial number as '0' (permission failure sentinel)")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Failed to grant READ_PHONE_STATE permission", e)
-            }
+            // READ_PHONE_STATE permission will be granted automatically by SerialNumberHelper
+            // when DeviceRegistration.registerDeviceWithToken() calls SerialNumberHelper.readSerialSafely()
+            // This uses proper permission state polling with exponential backoff (up to 5 seconds)
+            Log.d(TAG, "READ_PHONE_STATE permission will be granted during registration")
         } else {
             Log.w(TAG, "⚠️ Not Device Owner - may be Profile Owner instead")
         }
