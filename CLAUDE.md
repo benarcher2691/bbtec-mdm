@@ -4,7 +4,6 @@ This file provides context for Claude Code when working on this project.
 
 ## On Start-Up
 
-1. **Review learnings from bbtec-notes project**: Read `planning/bbtec-notes-learnings.md` to understand authentication patterns and solutions for sign-out errors
 
 ## Project Overview
 
@@ -16,7 +15,6 @@ Educational Android Mobile Device Management (MDM) system built with Android Man
 - **Backend**: Convex (realtime database, queries, mutations)
 - **Authentication**: Clerk
 - **Styling**: Tailwind CSS + shadcn/ui (New York style, Radix primitives)
-- **Device Management**: Android Management API (Google)
 - **Deployment**: Vercel (frontend), Convex (hosted), Clerk (hosted)
 
 ## Architecture Principles
@@ -69,7 +67,7 @@ Educational Android Mobile Device Management (MDM) system built with Android Man
 3. **Type checking**: `npm run type-check` (if available)
 4. **Linting**: `npm run lint`
 
-## Git Workflow
+## Git Workflow (not yet implemented)
 
 **CRITICAL: NEVER PUSH DIRECTLY TO MAIN/MASTER**
 
@@ -107,7 +105,6 @@ Educational Android Mobile Device Management (MDM) system built with Android Man
 
 **Vercel Dashboard:** Use for environment variables, deployment management, build settings
 **Convex Dashboard:** Use for creating deployments, schema inspection, deploy key management
-**Google Cloud Console:** Use for Android Management API setup, service accounts, enterprise configuration
 
 ### Golden Rule
 
@@ -116,11 +113,11 @@ Educational Android Mobile Device Management (MDM) system built with Android Man
 ## Security
 
 - Never expose Clerk secret keys client-side
-- Never expose Google service account credentials client-side
 - Validate all user input
 - Rate limit write operations
 - Scope all Convex queries by userId
 - **All Convex functions must check `auth.getUserIdentity()` for authorization**
+- **All endpoints must be protected (not open)
 
 ## Important Notes
 
@@ -152,7 +149,5 @@ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
 NEXT_PUBLIC_CONVEX_URL=https://...
 CONVEX_DEPLOYMENT=dev:...
-GOOGLE_APPLICATION_CREDENTIALS=./config/service-account-key.json
 ENTERPRISE_NAME=enterprises/LC03fy18qv
-GOOGLE_CLOUD_PROJECT_ID=bbtec-mdm
 ```
