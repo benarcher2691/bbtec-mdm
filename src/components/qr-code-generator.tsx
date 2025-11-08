@@ -55,12 +55,12 @@ export function QRCodeGenerator() {
 
   // Watch for token being used (reactive!)
   useEffect(() => {
-    if (tokenStatus?.used && tokenStatus.device && currentTokenId) {
+    if (tokenStatus?.used && tokenStatus.device) {
       // Token has been used - device enrolled!
-      setCurrentTokenId(null) // Stop polling
-      setTokenData(null) // Hide QR code
+      // Hide QR code but keep currentTokenId so success message shows
+      setTokenData(null)
     }
-  }, [tokenStatus, currentTokenId])
+  }, [tokenStatus])
 
   const handleGenerateToken = async () => {
     if (!selectedCompanyUserId) {
