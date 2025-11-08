@@ -1,8 +1,12 @@
 package com.bbtec.mdm.client
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import com.google.gson.Gson
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -11,6 +15,9 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
+import kotlin.math.min
+import kotlin.math.pow
+import kotlin.random.Random
 
 class ApiClient(private val context: Context) {
 
@@ -21,22 +28,37 @@ class ApiClient(private val context: Context) {
         .build()
     private val gson = Gson()
     private val prefsManager = PreferencesManager(context)
+    private val stateManager = HeartbeatStateManager(context)
+    private val ioScope = CoroutineScope(Dispatchers.IO)
 
     // Production server URL
     private val baseUrl = "https://bbtec-mdm.vercel.app/api/client"
 
+    /**
+     * Sends heartbeat to server with resilient error handling and backoff.
+     *
+     * Features:
+     * - Exponential backoff with full jitter (capped at 15min)
+     * - Latency tracking for observability
+     * - State persistence via DataStore
+     * - Structured error classification
+     */
     fun sendHeartbeat() {
         val deviceId = prefsManager.getDeviceId()
         val apiToken = prefsManager.getApiToken()
 
         if (apiToken.isEmpty()) {
-            Log.e("ApiClient", "Cannot send heartbeat: No API token")
+            Log.e(TAG, "Cannot send heartbeat: No API token")
             return
         }
 
+        // Track request start time
+        val requestStartMs = System.currentTimeMillis()
+        val requestStartElapsed = SystemClock.elapsedRealtime()
+
         val json = gson.toJson(mapOf(
             "deviceId" to deviceId,
-            "timestamp" to System.currentTimeMillis()
+            "timestamp" to requestStartMs
         ))
 
         val request = Request.Builder()
@@ -47,23 +69,103 @@ class ApiClient(private val context: Context) {
 
         client.newCall(request).enqueue(object : Callback {
             override fun onResponse(call: Call, response: Response) {
+                val latencyMs = System.currentTimeMillis() - requestStartMs
+
                 if (response.isSuccessful) {
+                    // SUCCESS PATH
                     prefsManager.setLastHeartbeat(System.currentTimeMillis())
+
+                    // Persist success state (resets failures and backoff)
+                    ioScope.launch {
+                        stateManager.recordSuccess()
+                    }
+
+                    Log.d(TAG, "✅ Heartbeat success (latency: ${latencyMs}ms)")
 
                     // Parse response to get updated ping interval
                     val body = response.body?.string()
                     val result = gson.fromJson(body, HeartbeatResponse::class.java)
                     result.pingInterval?.let { interval ->
                         prefsManager.setPingInterval(interval)
-                        Log.d("ApiClient", "Updated ping interval to $interval minutes")
+                        Log.d(TAG, "Updated ping interval to $interval minutes")
+                    }
+                } else {
+                    // HTTP ERROR PATH (4xx, 5xx)
+                    val httpCode = response.code
+                    val errorType = classifyHttpError(httpCode)
+
+                    Log.e(TAG, "❌ Heartbeat HTTP error: $httpCode ($errorType) (latency: ${latencyMs}ms)")
+
+                    // Calculate and persist failure state
+                    val newBackoff = calculateBackoff()
+                    ioScope.launch {
+                        stateManager.recordFailure(newBackoff)
+                    }
+
+                    // TODO: Implement token refresh on 401 auth failure
+                    if (httpCode == 401) {
+                        Log.w(TAG, "Auth failure - token may be expired (refresh not implemented yet)")
                     }
                 }
             }
 
-            override fun onFailure(call: Call, e: java.io.IOException) {
-                Log.e("ApiClient", "Heartbeat failed", e)
+            override fun onFailure(call: Call, e: IOException) {
+                val latencyMs = System.currentTimeMillis() - requestStartMs
+                val errorType = classifyNetworkError(e)
+
+                Log.e(TAG, "❌ Heartbeat network error: $errorType (latency: ${latencyMs}ms)", e)
+
+                // Calculate and persist failure state
+                val newBackoff = calculateBackoff()
+                ioScope.launch {
+                    stateManager.recordFailure(newBackoff)
+                }
             }
         })
+    }
+
+    /**
+     * Calculates exponential backoff with full jitter.
+     * Formula: random(0, min(base * 2^failures, maxBackoff))
+     *
+     * @return Backoff duration in milliseconds
+     */
+    private fun calculateBackoff(): Long {
+        val baseMs = 1000L  // 1 second base
+        val maxBackoffMs = 15 * 60 * 1000L  // 15 minutes cap
+
+        val failures = stateManager.getConsecutiveFailuresBlocking()
+        val exponentialMs = (baseMs * 2.0.pow(failures)).toLong()
+        val cappedMs = min(exponentialMs, maxBackoffMs)
+
+        // Full jitter: random between 0 and capped value
+        val backoffMs = Random.nextLong(0, cappedMs + 1)
+
+        Log.d(TAG, "Backoff calculated: ${backoffMs}ms (failures: $failures)")
+        return backoffMs
+    }
+
+    /**
+     * Classifies HTTP errors for structured logging.
+     */
+    private fun classifyHttpError(code: Int): String {
+        return when (code) {
+            in 400..499 -> "client_error_${code}"
+            in 500..599 -> "server_error_${code}"
+            else -> "http_error_${code}"
+        }
+    }
+
+    /**
+     * Classifies network errors for structured logging.
+     */
+    private fun classifyNetworkError(e: IOException): String {
+        return when (e) {
+            is SocketTimeoutException -> "timeout"
+            is UnknownHostException -> "dns_failure"
+            is ConnectException -> "connection_refused"
+            else -> "network_error"
+        }
     }
 
     fun getCommands(callback: (List<Command>?) -> Unit) {

@@ -7,6 +7,10 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
 
 /**
  * Handles ACTION_PROVISIONING_SUCCESSFUL intent
@@ -93,6 +97,12 @@ class ProvisioningSuccessActivity : Activity() {
             Log.d(TAG, "✅ Test provisioning complete - CHECK DEVICE OWNER STATUS")
         }
 
+        // Schedule WorkManager periodic health check
+        schedulePeriodicHealthCheck()
+
+        // Request battery optimization exemption
+        requestBatteryOptimization()
+
         // Launch MainActivity to show device management UI
         val mainIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -103,6 +113,49 @@ class ProvisioningSuccessActivity : Activity() {
 
         // Finish this activity
         finish()
+    }
+
+    /**
+     * Schedules periodic WorkManager health check.
+     *
+     * This is the backstop that ensures PollingService stays running.
+     * - Period: 15 minutes (minimum for periodic work)
+     * - Flex window: 10 minutes (battery efficiency)
+     */
+    private fun schedulePeriodicHealthCheck() {
+        Log.d(TAG, "📅 Scheduling WorkManager periodic health check")
+
+        val healthCheckRequest = PeriodicWorkRequestBuilder<HeartbeatHealthWorker>(
+            repeatInterval = 15,
+            repeatIntervalTimeUnit = TimeUnit.MINUTES,
+            flexTimeInterval = 10,
+            flexTimeIntervalUnit = TimeUnit.MINUTES
+        ).build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "mdm-heartbeat-health-check",
+            ExistingPeriodicWorkPolicy.KEEP,
+            healthCheckRequest
+        )
+
+        Log.d(TAG, "✅ WorkManager health check scheduled")
+    }
+
+    /**
+     * Requests battery optimization exemption.
+     *
+     * Critical for MDM apps to maintain persistent background service.
+     * User will see system dialog asking to allow unrestricted battery usage.
+     */
+    private fun requestBatteryOptimization() {
+        val batteryHelper = BatteryOptimizationHelper(this)
+
+        if (!batteryHelper.isIgnoringBatteryOptimizations()) {
+            Log.d(TAG, "🔋 Requesting battery optimization exemption")
+            batteryHelper.requestBatteryOptimizationExemption(this)
+        } else {
+            Log.d(TAG, "✅ Already exempt from battery optimization")
+        }
     }
 
     companion object {

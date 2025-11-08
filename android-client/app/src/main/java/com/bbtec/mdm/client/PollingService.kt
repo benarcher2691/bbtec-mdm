@@ -3,23 +3,47 @@ package com.bbtec.mdm.client
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.IBinder
-import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class PollingService : Service() {
 
-    private val handler = Handler(Looper.getMainLooper())
+    private val pollingThread = HandlerThread("PollingThread")
+    private lateinit var pollingHandler: Handler
+    private lateinit var watchdogHandler: Handler
     private lateinit var prefsManager: PreferencesManager
     private lateinit var apiClient: ApiClient
+    private lateinit var stateManager: HeartbeatStateManager
+    private lateinit var notificationManager: NotificationManager
 
     companion object {
         private const val TAG = "PollingService"
+        private const val NOTIFICATION_ID = 1
+        private const val CHANNEL_ID = "mdm_service_channel"
+
+        // Liveness flag for WorkManager health checks
+        @Volatile
+        private var isRunning = false
+
+        /**
+         * Check if service is running (for WorkManager health checks).
+         * Uses in-process flag instead of unreliable ActivityManager.
+         */
+        fun isServiceRunning(): Boolean = isRunning
 
         fun startService(context: Context) {
             Log.d(TAG, "startService called")
@@ -43,37 +67,100 @@ class PollingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "onCreate called")
+        Log.d(TAG, "✨ onCreate called")
 
-        // Start as foreground service on Android 8+ to avoid background restrictions
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channelId = "mdm_service_channel"
-            val channelName = "MDM Service"
+        // Set liveness flag
+        isRunning = true
 
-            // Create notification channel
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            val channel = NotificationChannel(
-                channelId,
-                channelName,
-                NotificationManager.IMPORTANCE_LOW
-            )
-            notificationManager.createNotificationChannel(channel)
-
-            // Create notification
-            val notification = Notification.Builder(this, channelId)
-                .setContentTitle("BBTec MDM")
-                .setContentText("Device management active")
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .build()
-
-            // Start as foreground
-            startForeground(1, notification)
-            Log.d(TAG, "Started as foreground service")
-        }
-
+        // Initialize managers
         prefsManager = PreferencesManager(this)
         apiClient = ApiClient(this)
+        stateManager = HeartbeatStateManager(this)
+        notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // Start polling thread (off main thread)
+        pollingThread.start()
+        pollingHandler = Handler(pollingThread.looper)
+
+        // Create watchdog handler on main thread
+        watchdogHandler = Handler(android.os.Looper.getMainLooper())
+
+        // Create foreground notification
+        createNotificationChannel()
+        val notification = createNotification("Initializing...")
+        startForeground(NOTIFICATION_ID, notification)
+        Log.d(TAG, "✅ Started as foreground service")
+
+        // Start polling and watchdog
         startPolling()
+        startWatchdog()
+    }
+
+    /**
+     * Creates notification channel for foreground service.
+     * Low importance to avoid disturbing the user.
+     */
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "MDM Service",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Device management heartbeat service"
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    /**
+     * Creates ongoing notification with current heartbeat status.
+     * setOngoing(true) prevents user from swiping it away.
+     */
+    private fun createNotification(status: String): Notification {
+        // Intent to open MainActivity when notification is tapped
+        val intent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE
+        )
+
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CHANNEL_ID)
+                .setContentTitle("BBTec MDM Active")
+                .setContentText(status)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setOngoing(true)  // Can't be dismissed by user
+                .setContentIntent(pendingIntent)
+                .build()
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this)
+                .setContentTitle("BBTec MDM Active")
+                .setContentText(status)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setOngoing(true)
+                .setContentIntent(pendingIntent)
+                .build()
+        }
+    }
+
+    /**
+     * Updates notification with last heartbeat time.
+     */
+    private fun updateNotification() {
+        val lastHeartbeat = prefsManager.getLastHeartbeat()
+        val status = if (lastHeartbeat > 0) {
+            val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(lastHeartbeat))
+            "Last check-in: $time"
+        } else {
+            "Waiting for first check-in..."
+        }
+
+        val notification = createNotification(status)
+        notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -86,12 +173,16 @@ class PollingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startPolling() {
-        Log.d(TAG, "startPolling called")
-        handler.post(object : Runnable {
+        Log.d(TAG, "🔄 startPolling called")
+        pollingHandler.post(object : Runnable {
             override fun run() {
-                Log.d(TAG, "Polling cycle started")
+                Log.d(TAG, "📡 Polling cycle started")
+
                 // Send heartbeat
                 apiClient.sendHeartbeat()
+
+                // Update notification with latest heartbeat time
+                updateNotification()
 
                 // Check for commands
                 apiClient.getCommands { commands ->
@@ -147,14 +238,89 @@ class PollingService : Service() {
 
                 // Schedule next poll
                 val intervalMs = prefsManager.getPingInterval() * 60 * 1000L
-                Log.d(TAG, "Scheduling next poll in ${intervalMs / 60000} minutes")
-                handler.postDelayed(this, intervalMs)
+                Log.d(TAG, "⏰ Scheduling next poll in ${intervalMs / 60000} minutes")
+                pollingHandler.postDelayed(this, intervalMs)
             }
         })
     }
 
+    /**
+     * Watchdog monitors heartbeat health and triggers self-restart if needed.
+     * Uses monotonic clock (elapsedRealtime) to avoid wall-clock issues.
+     * Checks every minute.
+     */
+    private fun startWatchdog() {
+        Log.d(TAG, "🐕 Watchdog started")
+        watchdogHandler.postDelayed(object : Runnable {
+            override fun run() {
+                val now = SystemClock.elapsedRealtime()
+                val lastSuccess = stateManager.getLastSuccessAtBlocking()
+                val pingIntervalMs = prefsManager.getPingInterval() * 60 * 1000L
+                val maxSilenceMs = pingIntervalMs * 2
+
+                // Check if heartbeat is overdue
+                if (lastSuccess > 0 && (now - lastSuccess) > maxSilenceMs) {
+                    val silenceMinutes = (now - lastSuccess) / 60_000
+                    Log.w(TAG, "🚨 Watchdog: No successful heartbeat for ${silenceMinutes}m (threshold: ${maxSilenceMs / 60_000}m)")
+                    Log.w(TAG, "🚨 Triggering self-restart via WorkManager kick")
+
+                    // Schedule service restart via WorkManager
+                    scheduleServiceKick()
+
+                    // Stop self to allow restart
+                    stopSelf()
+                    return
+                }
+
+                // Log watchdog health check
+                val minutesSinceSuccess = if (lastSuccess > 0) (now - lastSuccess) / 60_000 else -1
+                Log.d(TAG, "🐕 Watchdog check: OK (last success: ${minutesSinceSuccess}m ago)")
+
+                // Schedule next watchdog check in 1 minute
+                watchdogHandler.postDelayed(this, 60_000L)
+            }
+        }, 60_000L)  // First check after 1 minute
+    }
+
+    /**
+     * Schedules a one-off WorkManager job to restart the service.
+     * Safe for background start restrictions.
+     */
+    private fun scheduleServiceKick() {
+        Log.d(TAG, "📋 Scheduling ServiceKickWorker")
+        val kickRequest = OneTimeWorkRequestBuilder<ServiceKickWorker>().build()
+        WorkManager.getInstance(this).enqueueUniqueWork(
+            "mdm-service-kick",
+            ExistingWorkPolicy.REPLACE,
+            kickRequest
+        )
+    }
+
     override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null)
+        Log.w(TAG, "⚠️ onDestroy called - service is being killed")
+
+        // Clear liveness flag
+        isRunning = false
+
+        // Schedule WorkManager recovery kick
+        scheduleServiceKick()
+        Log.d(TAG, "📋 Scheduled recovery kick via WorkManager")
+
+        // Clean up handlers
+        pollingHandler.removeCallbacksAndMessages(null)
+        watchdogHandler.removeCallbacksAndMessages(null)
+
+        // Stop polling thread
+        pollingThread.quitSafely()
+
         super.onDestroy()
+        Log.d(TAG, "💀 Service destroyed")
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.w(TAG, "⚠️ onTaskRemoved - app swiped away")
+        // Schedule recovery via WorkManager
+        scheduleServiceKick()
+        super.onTaskRemoved(rootIntent)
     }
 }
