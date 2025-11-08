@@ -242,8 +242,13 @@ class MainActivity : AppCompatActivity() {
         val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
 
         // Get stable enrollment ID (unique per enrollment, survives app reinstall)
+        // NOTE: getEnrollmentSpecificId() only available on Android 12+ (API 31+)
         val enrollmentId = try {
-            dpm.enrollmentSpecificId ?: "Not available (not Device Owner)"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                dpm.enrollmentSpecificId ?: "Not available (not Device Owner)"
+            } else {
+                "Not available (Android < 12)"
+            }
         } catch (e: Exception) {
             "Error: ${e.message}"
         }

@@ -109,8 +109,17 @@ class DeviceRegistration(private val context: Context) {
         val isDeviceOwner = dpm.isDeviceOwnerApp(context.packageName)
 
         // Get stable enrollment ID (unique per enrollment, survives app reinstall)
-        val enrollmentId = dpm.enrollmentSpecificId
-        Log.e(TAG, "Enrollment ID (DPM): $enrollmentId")
+        // NOTE: getEnrollmentSpecificId() only available on Android 12+ (API 31+)
+        val enrollmentId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            dpm.enrollmentSpecificId
+        } else {
+            // Android 10/11: Fall back to SSAID (scoped ANDROID_ID)
+            Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ANDROID_ID
+            )
+        }
+        Log.e(TAG, "Enrollment ID: $enrollmentId (API ${Build.VERSION.SDK_INT})")
 
         // Get app-scoped Android ID (SSAID - stable for this app+device+user)
         // This is what the app sees - different from base Android ID shown by adb!

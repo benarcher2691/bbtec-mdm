@@ -128,6 +128,16 @@ Educational Android Mobile Device Management (MDM) system built with Android Man
 - All queries/mutations must check `auth.getUserIdentity()` for authorization
 - Use indexes for performance (userId, deviceId, etc.)
 - Use Convex authentication wrapper components to prevent sign-out errors
+- **CRITICAL - Schema Changes**: After modifying `convex/schema.ts` or any Convex functions, ALWAYS run `npx convex deploy` to deploy to production
+  - Schema changes are NOT automatically deployed
+  - Frontend deployment (Vercel) does NOT deploy Convex backend
+  - Symptoms of missing deployment: crashes, missing fields, "field not found" errors
+  - **ALWAYS ASK USER**: "Should I run `npx convex deploy` to deploy schema changes?"
+- **CRITICAL - Optional Fields**: Convex optional fields use `undefined`, NOT `null`
+  - Schema: `v.optional(v.string())` → TypeScript: `string | undefined`
+  - When inserting/updating: Use `field: value || undefined`, NOT `field: value || null`
+  - Example: `{ name: name || undefined }` ✅ NOT `{ name: name || null }` ❌
+  - TypeScript error: "Type 'null' is not assignable to type 'string | undefined'"
 
 ### Android Management API
 - All API calls must be server-side (Next.js Server Actions or API routes)
