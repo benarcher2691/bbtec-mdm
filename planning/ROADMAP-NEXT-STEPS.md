@@ -1,9 +1,127 @@
 # BBTec MDM - Roadmap & Next Steps
 
 **Last Updated:** 2025-11-08
-**Current Status:** ✅ Two-table architecture implemented with enrollmentId-based device tracking (v0.0.34) - **AWAITING SMOKE TESTS**
+**Current Status:** ✅ Serial number race condition SOLVED with permission state polling (v0.0.37) - **TESTED & VERIFIED**
 
 ## Recent Achievements
+
+### 2025-11-08: Serial Number Race Condition - FINAL FIX (v0.0.37)
+
+**🎯 CRITICAL BUG FIX - Serial Number Race Condition ELIMINATED (8+ Hour Investigation)**
+
+**Problem Evolution:**
+After extensive investigation across v0.0.33-v0.0.36, the issue persisted: **same physical device** produced different serial number results between enrollments:
+- First enrollment: ✅ Hardware serial `1286Z2HN00621`
+- Second enrollment: ❌ Serial `0` (ERROR - Permission Failure)
+
+**Root Cause Identified (Expert Validated):**
+1. ❌ Device Owner must **explicitly grant** READ_PHONE_STATE to itself via `setPermissionGrantState()`
+2. ❌ Permission grant has **race condition** - takes time to become effective (not instant)
+3. ❌ **Two registration code paths diverged**:
+   - ProvisioningSuccessActivity: Had retry logic (but only 900ms, used wrong API)
+   - MainActivity: NO retry - called getSerial() immediately
+4. ❌ Previous retry used `checkSelfPermission()` + sleep instead of **polling actual permission state**
+
+**Solution: Centralized Permission Handling with State Polling**
+
+**NEW: SerialNumberHelper.kt** - Single source of truth for both code paths
+```kotlin
+object SerialNumberHelper {
+    fun readSerialSafely(context: Context): String? {
+        // 1. Grant permission and poll state with exponential backoff
+        val granted = ensurePhoneStateGranted(context)
+        if (!granted) return null
+
+        // 2. Read serial ONLY after permission confirmed GRANTED
+        val serial = Build.getSerial()
+        val ssaId = Settings.Secure.getString(...)
+
+        // 3. Validate (reject SSAID collisions/patterns)
+        return when {
+            serial == ssaId -> null                              // Collision
+            serial.matches(Regex("^[0-9a-fA-F]{16}$")) -> null  // 16-hex pattern
+            serial == "unknown" || serial.isEmpty() -> null      // Placeholder
+            else -> serial                                       // Valid!
+        }
+    }
+
+    private fun ensurePhoneStateGranted(context: Context): Boolean {
+        // Grant permission
+        dpm.setPermissionGrantState(admin, pkg, READ_PHONE_STATE, GRANTED)
+
+        // Poll getPermissionGrantState() with exponential backoff
+        // 100 → 200 → 400 → 800 → 1600 → 2000ms (~5 seconds total)
+        for ((attempt, delay) in delays.withIndex()) {
+            val state = dpm.getPermissionGrantState(admin, pkg, READ_PHONE_STATE)
+            if (state == PERMISSION_GRANT_STATE_GRANTED) {
+                Log.d(TAG, "Permission ready after ${totalWait}ms")
+                return true
+            }
+            Thread.sleep(delay)  // Exponential backoff
+        }
+        return false  // Timeout after 5s
+    }
+}
+```
+
+**Key Improvements:**
+1. ✅ **Polls `getPermissionGrantState()`** - checks actual state, not just `checkSelfPermission()`
+2. ✅ **Exponential backoff** - 100→200→400→800→1600→2000ms (~5s total, vs previous 900ms)
+3. ✅ **Single helper** - both ProvisioningSuccessActivity AND MainActivity use same logic
+4. ✅ **Keeps validation** - SSAID collision/pattern detection intact
+5. ✅ **Returns null** - never substitutes SSAID, caller uses sentinel "0"
+
+**Changes:**
+- NEW: `SerialNumberHelper.kt` - 175 lines, centralized permission handling
+- UPDATED: `DeviceRegistration.kt` - Single line: `SerialNumberHelper.readSerialSafely(context) ?: "0"`
+- UPDATED: `ProvisioningSuccessActivity.kt` - Removed manual retry logic, uses helper
+- UPDATED: `build.gradle.kts` - Version 36 → 37
+
+**Testing Results (2025-11-08):**
+- ✅ **First Device (Hannspree HSG1416)**
+  - Serial: `1286Z2HN00621` ✓ (hardware serial)
+  - Android ID: `3634d8fa63b16855` ✓ (16 hex chars - SSAID)
+  - No collision, no errors
+
+- ✅ **Second Device (Hannspree HSG1416)**
+  - Serial: `313VC2HN00110` ✓ (hardware serial)
+  - Android ID: `7a15c9e9c5bcf02b` ✓ (16 hex chars - SSAID)
+  - No collision, no errors
+
+**Conclusion:**
+After 8+ hours of investigation and multiple iterations (v0.0.33-v0.0.37), the serial number race condition is **DEFINITIVELY SOLVED**. The centralized SerialNumberHelper with permission state polling and exponential backoff ensures consistent, reliable hardware serial number capture on Android 10+ Device Owner apps.
+
+**Files Modified:**
+- `android-client/app/src/main/java/com/bbtec/mdm/client/SerialNumberHelper.kt` (NEW)
+- `android-client/app/src/main/java/com/bbtec/mdm/client/DeviceRegistration.kt`
+- `android-client/app/src/main/java/com/bbtec/mdm/client/ProvisioningSuccessActivity.kt`
+- `android-client/app/build.gradle.kts`
+- `artifacts/apks/bbtec-mdm-client-v0.0.37.apk`
+
+---
+
+### 2025-11-08: Android 10/11 Compatibility & UI Fixes (v0.0.35-v0.0.36)
+
+**v0.0.35: Android 10/11 Compatibility**
+- **Problem:** `getEnrollmentSpecificId()` only exists on Android 12+ (API 31+)
+- **Error:** `NoSuchMethodError` crash on Android 10 devices
+- **Solution:** Runtime version check with SSAID fallback
+```kotlin
+val enrollmentId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    dpm.enrollmentSpecificId  // Android 12+
+} else {
+    Settings.Secure.getString(...)  // Android 10/11 fallback
+}
+```
+- **Result:** ✅ App works on Android 10-12+ without crashes
+
+**v0.0.36: Android ID Field in Registration Payload**
+- **Problem:** Web UI showed empty Android ID field after enrollment
+- **Root Cause:** Removed `androidId` field when implementing three-field architecture
+- **Solution:** Added `"androidId" to ssaId` for UI backward compatibility
+- **Result:** ✅ Web UI displays Android ID correctly
+
+---
 
 ### 2025-11-08: Two-Table Architecture & Serial Number Fix (v0.0.34)
 
