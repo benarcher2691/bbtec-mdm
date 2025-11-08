@@ -1,9 +1,121 @@
 # BBTec MDM - Roadmap & Next Steps
 
-**Last Updated:** 2025-11-07
-**Current Status:** ✅ Serial number race condition ELIMINATED with 4-layer defense (v0.0.33) - **TESTED & VERIFIED**
+**Last Updated:** 2025-11-08
+**Current Status:** ✅ Two-table architecture implemented with enrollmentId-based device tracking (v0.0.34) - **AWAITING SMOKE TESTS**
 
 ## Recent Achievements
+
+### 2025-11-08: Two-Table Architecture & Serial Number Fix (v0.0.34)
+
+**🎯 ARCHITECTURAL CHANGE - Device Tracking Across Factory Resets**
+
+**Problem Re-Discovered:**
+Despite v0.0.33's 4-layer defense, second device enrollment showed `serialNumber === androidId` again. Deep investigation revealed:
+- `Build.getSerial()` doesn't always throw `SecurityException` on permission failure
+- Instead, it can **return the app-scoped Android ID** (SSAID) directly
+- The Android ID visible to the app differs from the base Android ID shown by adb
+- Result: Even with validation, `serial == androidId` check couldn't detect the bug
+
+**Root Cause (Fundamental):**
+Android 8+ uses **app-scoped Android ID (SSAID)** - each app sees a different Android ID for the same device. The MDM app sees a different ID than adb shows, making cross-reference debugging extremely difficult. Additionally, `Build.getSerial()` can return this SSAID when permissions aren't ready, creating guaranteed collisions.
+
+**Solution: Never Use androidId as Serial Fallback**
+1. **Immediate Validation**: Check serial against SSAID, placeholders, hex patterns
+2. **Sentinel Value "0"**: Use when hardware serial unavailable (never mix IDs)
+3. **Backend Rejection**: Return 400 error if `serial === ssaId` detected
+4. **Three Separate IDs**: enrollmentId, ssaId, serialNumber (never copied between fields)
+5. **Two-Table Architecture**: Track physical devices separately from enrollments
+
+**Implementation:**
+
+**Android Client (DeviceRegistration.kt):**
+```kotlin
+// Get three SEPARATE identifiers (NEVER mix them!)
+val enrollmentId = dpm.enrollmentSpecificId  // Unique per enrollment
+val ssaId = Settings.Secure.ANDROID_ID       // App-scoped (stable for this app)
+val serialNumber = try {
+    val serial = Build.getSerial()
+    when {
+        serial == ssaId -> "0"  // Collision - use sentinel
+        serial == "unknown" || serial.isEmpty() -> "0"
+        serial.matches(Regex("^[0-9a-fA-F]{16}$")) -> "0"  // Looks like Android ID
+        else -> serial  // Valid hardware serial
+    }
+} catch (e: SecurityException) {
+    "0"  // Permission denied
+}
+```
+
+**Backend (Two-Table Architecture):**
+```typescript
+// 1. Resolve or create physical device
+const physicalDeviceId = await convex.mutation(api.devices.resolveDevice, {
+    ssaId,           // Primary matcher
+    serialNumber,    // Secondary matcher (if valid)
+    brand, model, manufacturer
+})
+
+// 2. Register enrollment (links to physical device)
+await convex.mutation(api.deviceClients.registerDevice, {
+    deviceId: enrollmentId,      // Primary key
+    enrollmentId, ssaId, serialNumber,
+    physicalDeviceId,            // FK to devices table
+    // ... other fields
+})
+```
+
+**Device Matching Logic:**
+1. **Primary**: Match by SSAID (app-scoped Android ID)
+2. **Secondary**: Match by serial + brand + model (if serial is valid)
+3. **Create New**: No match found
+
+**Benefits:**
+- ✅ **Zero Tolerance**: Backend rejects `serial === ssaId` with 400 error
+- ✅ **Device Tracking**: Same hardware recognized across factory resets via SSAID
+- ✅ **Enrollment Tracking**: Each enrollment has unique ID (enrollmentId)
+- ✅ **Sentinel Value**: "0" impossible as real serial, easy to detect failures
+- ✅ **UI Visibility**: All three IDs displayed in Android client for debugging
+
+**Database Schema Changes:**
+```typescript
+// New table: Physical devices
+devices: {
+    ssaId, serialNumber,
+    brand, model, manufacturer, buildFingerprint,
+    createdAt, updatedAt
+}
+
+// Updated table: Enrollments
+deviceClients: {
+    deviceId: enrollmentId,  // v0.0.34+ primary key
+    enrollmentId, ssaId, serialNumber,
+    physicalDeviceId,        // FK to devices table
+    // ... legacy fields for backward compatibility
+}
+```
+
+**Files Modified:**
+- `android-client/app/src/main/java/com/bbtec/mdm/client/DeviceRegistration.kt` - Three separate IDs, immediate validation
+- `android-client/app/src/main/java/com/bbtec/mdm/client/MainActivity.kt` - Display all three IDs in UI
+- `android-client/app/src/main/res/layout/activity_main.xml` - Add TextViews for device identifiers
+- `android-client/app/build.gradle.kts` - Bump to v0.0.34
+- `convex/schema.ts` - Add devices table, update deviceClients schema
+- `convex/devices.ts` - Add resolveDevice() mutation with matching logic
+- `convex/deviceClients.ts` - Accept new fields in registerDevice()
+- `src/app/api/dpc/register/route.ts` - Device resolution before enrollment registration
+
+**Testing Status:** ⏳ **SMOKE TESTS PENDING**
+- Build: ✅ Successful (12 MB APK, signed and aligned)
+- Code Review: ✅ Three-ID separation verified, no fallback mixing
+- Field Test: ⏳ Awaiting enrollment test with factory reset verification
+
+**Expected Results:**
+- ✅ enrollmentId, ssaId, serialNumber all displayed separately in UI
+- ✅ serialNumber NEVER equals ssaId (backend rejects if true)
+- ✅ Factory reset + re-enroll creates new enrollment linked to same device
+- ✅ Device matching works across enrollments via SSAID
+
+---
 
 ### 2025-11-07: Device Commands Production Hardening (v0.0.30-v0.0.33)
 
@@ -541,12 +653,12 @@ The 4-layer defense strategy successfully eliminated the race condition. Either 
 **Android Client:**
 - Kotlin, Android 10+ (API 29+)
 - Device Owner mode (full device control)
-- Current version: v0.0.33 (production-ready, field tested 2025-11-07)
+- Current version: v0.0.34 (awaiting smoke tests, 2025-11-08)
 - Signature: `53:CD:0E:1A:9E:3F:3A:38:C6:66:84:2A:98:94:CA:8E:B1:ED:DC:DC:F4:FB:0E:13:10:B3:03:8F:A7:1B:CE:21`
 - Features: Device commands (wipe/lock/reboot), ping interval config, manual sync button, app installation
-- Security: Android ID-based device identification (changes on factory reset)
+- Security: enrollmentId-based device identification + two-table architecture for factory reset tracking
 - Reliability: Async network operations with 10s timeouts, callback-based wipe confirmation
-- Serial Number Capture: 4-layer defense strategy eliminates race conditions (verified working)
+- Device Identifiers: Three separate IDs (enrollmentId, ssaId, serialNumber) - never mixed, sentinel value "0" for unavailable serial
 
 **Enrollment Flow:**
 1. Admin generates QR code (includes enrollment token, APK download URL)
@@ -607,13 +719,17 @@ The 4-layer defense strategy successfully eliminated the race condition. Either 
 - Android: `ApiClient.kt`, `DeviceRegistration.kt`, `PolicyManager.kt`
 - UI: `src/components/device-list-table.tsx`
 
-**Current Device:**
-- Model: Hannspree HSG1416
-- Serial: 1286Z2HN00621
-- Android ID: ebc154f7d66ff218
-- Android: 10 (API 29)
-- App Version: v0.0.33
-- Status: ✅ Enrolled as Device Owner (tested 2025-11-07)
+**Current Devices:**
+- Device 1: Hannspree HSG1416
+  - Serial: 1286Z2HN00621
+  - Android: 10 (API 29)
+  - App Version: v0.0.33 (ready for v0.0.34 upgrade)
+  - Status: ✅ Enrolled as Device Owner (tested 2025-11-07)
+- Device 2: Hannspree HSG1416
+  - Serial: 313VC2HN00110
+  - Android: 10 (API 29)
+  - App Version: Requires re-enrollment with v0.0.34
+  - Status: ⚠️ Had serial==androidId bug (trigger for v0.0.34 fix)
 
 ---
 
