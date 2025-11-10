@@ -31,8 +31,8 @@ class ApiClient(private val context: Context) {
     private val stateManager = HeartbeatStateManager(context)
     private val ioScope = CoroutineScope(Dispatchers.IO)
 
-    // Production server URL
-    private val baseUrl = "https://bbtec-mdm.vercel.app/api/client"
+    // Server URL from build configuration (varies by flavor: debug, staging, production)
+    private val baseUrl = BuildConfig.BASE_URL
 
     /**
      * Sends heartbeat to server with resilient error handling and backoff.

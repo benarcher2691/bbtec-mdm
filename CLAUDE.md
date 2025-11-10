@@ -62,19 +62,118 @@ Educational Android Mobile Device Management (MDM) system built with Android Man
 
 ## Development Workflow
 
-1. **Start dev server**: `npm run dev`
-2. **Convex dev**: `npx convex dev` (separate terminal)
-3. **Type checking**: `npm run type-check` (if available)
-4. **Linting**: `npm run lint`
+### Multi-Environment Setup
 
-## Git Workflow (not yet implemented)
+This project uses a 3-tier development workflow:
+- **Local**: True offline development (Convex backend on your machine, Next.js on localhost)
+- **Cloud Dev**: Staging environment (Vercel preview + Convex dev deployment)
+- **Cloud Production**: Production (Vercel + Convex production deployment)
 
-**CRITICAL: NEVER PUSH DIRECTLY TO MAIN/MASTER**
+### Starting Local Development (Recommended)
 
-- Always work on feature branches or the `development` branch
-- Create pull requests for all changes to main/master
-- Use descriptive branch names (e.g., `feature/device-table`, `fix/auth-error`)
-- Main branch should only be updated via PR merges
+**Terminal 1 - Convex Local Backend:**
+```bash
+npx convex dev --local
+# Runs Convex backend at http://127.0.0.1:3210
+# Database stored in ~/.convex/ (completely offline!)
+# No quota usage, no internet required after initial setup
+```
+
+**Terminal 2 - Next.js Dev Server:**
+```bash
+NEXT_PRIVATE_TURBOPACK=0 npm run dev
+# Runs at http://localhost:3000
+# IMPORTANT: Disable Turbopack (Next.js 15 + React 19 RC compatibility)
+```
+
+**Note:** If you get webpack chunk loading errors, clean build cache:
+```bash
+rm -rf .next && rm -rf node_modules/.cache
+NEXT_PRIVATE_TURBOPACK=0 npm run dev
+```
+
+### Local Development Features
+- ✅ **Completely offline** (after initial Convex setup)
+- ✅ **No cloud quota usage** (develop without limits!)
+- ✅ **Isolated database** (changes don't affect dev/prod)
+- ✅ **Fast iteration** (no network latency)
+- ✅ **Local Convex dashboard** available
+
+### Alternative: Cloud Dev Workflow
+
+If you need to test against cloud dev deployment:
+```bash
+# Terminal 1: Cloud Convex dev deployment
+npx convex dev  # Connects to kindly-mule-339 (dev)
+
+# Terminal 2: Next.js
+npm run dev
+```
+
+Uses `.env.local` pointing to cloud dev deployment.
+
+### Other Commands
+
+- **Type checking**: `npm run type-check` (if available)
+- **Linting**: `npm run lint`
+- **Deploy Convex schema**: `npx convex deploy` (production deployment)
+
+## Git Workflow
+
+**CRITICAL: NEVER PUSH DIRECTLY TO MAIN/MASTER OR DEVELOPMENT**
+
+Branch protection is enabled on both `master` and `development` branches. All changes must go through Pull Requests.
+
+### Branch Structure
+
+```
+master (production)          ← Protected, auto-deploys to production
+  ↑
+  PR + Review
+  ↑
+development (staging)        ← Protected, auto-deploys to Vercel preview
+  ↑
+  PR + Review
+  ↑
+feature/* branches           ← Local development
+```
+
+### Daily Workflow
+
+1. **Start new feature:**
+   ```bash
+   git checkout development
+   git pull
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **Develop locally:**
+   - Run `npx convex dev --local` + `NEXT_PRIVATE_TURBOPACK=0 npm run dev`
+   - Make changes, test, commit
+
+3. **Push and create PR to development:**
+   ```bash
+   git add .
+   git commit -m "feat: Your feature description"
+   git push -u origin feature/your-feature-name
+   ```
+   - Create PR: `feature/your-feature-name` → `development` on GitHub
+   - Vercel automatically creates preview deployment
+   - Preview uses `kindly-mule-339` (Convex dev deployment)
+
+4. **Test on Vercel preview, then merge to development**
+
+5. **When ready for production:**
+   - Create PR: `development` → `master` on GitHub
+   - Review and merge
+   - Auto-deploys to production (uses `expert-lemur-691` Convex deployment)
+
+### Branch Naming
+
+- `feature/description` - New features
+- `fix/description` - Bug fixes
+- `refactor/description` - Code refactoring
+- `docs/description` - Documentation updates
 
 ## Platform Management: Web UI First, CLI Later
 
@@ -144,10 +243,87 @@ Educational Android Mobile Device Management (MDM) system built with Android Man
 
 ## Environment Variables
 
+### Local Development (`.env.local`)
+
 ```bash
+# Convex Local Backend (runs on your machine)
+NEXT_PUBLIC_CONVEX_URL=http://127.0.0.1:3210
+CONVEX_DEPLOYMENT=local:local-ben_archer2691-bbtec_mdm
+
+# Clerk Authentication
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
-NEXT_PUBLIC_CONVEX_URL=https://...
-CONVEX_DEPLOYMENT=dev:...
+CLERK_ISSUER_URL=https://living-skunk-13.clerk.accounts.dev
+
+# Android Management API
+GOOGLE_APPLICATION_CREDENTIALS=./config/service-account-key.json
 ENTERPRISE_NAME=enterprises/LC03fy18qv
+GOOGLE_CLOUD_PROJECT_ID=bbtec-mdm
+
+# Next.js
+NODE_ENV=development
 ```
+
+**Note:** Convex will auto-update `CONVEX_DEPLOYMENT` when you run `npx convex dev --local`.
+
+### Cloud Dev (`.env.development` - reference only, set in Vercel)
+
+```bash
+# Convex Dev Deployment (for Vercel preview)
+NEXT_PUBLIC_CONVEX_URL=https://kindly-mule-339.convex.cloud
+CONVEX_DEPLOYMENT=prod:kindly-mule-339
+
+# Clerk (same test keys as local)
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+```
+
+### Cloud Production (`.env.production` - reference only, set in Vercel)
+
+```bash
+# Convex Production Deployment
+NEXT_PUBLIC_CONVEX_URL=https://expert-lemur-691.convex.cloud
+CONVEX_DEPLOYMENT=prod:expert-lemur-691
+
+# Clerk (same test keys)
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+```
+
+**Security:** Never commit `.env.local`, `.env.development`, or `.env.production` - they contain secrets!
+
+## Android Client Build Variants
+
+The Android client uses **Product Flavors** to support multiple server environments:
+
+### Build Variants
+
+| Flavor | Server URL | Application ID | Use Case |
+|--------|------------|----------------|----------|
+| **local** | `http://localhost:3000/api/client` | `com.bbtec.mdm.client.local` | Local development (physical device + `adb reverse`) |
+| **staging** | `https://bbtec-mdm-git-development.vercel.app/api/client` | `com.bbtec.mdm.client.staging` | Testing against Vercel preview |
+| **production** | `https://bbtec-mdm.vercel.app/api/client` | `com.bbtec.mdm.client` | Production deployment |
+
+### Build Commands
+
+```bash
+cd android-client
+
+# Local development (install on physical device)
+./gradlew installLocalDebug
+adb reverse tcp:3000 tcp:3000  # Forward localhost to device
+
+# Staging testing
+./gradlew assembleStagingRelease
+adb install -r app/build/outputs/apk/staging/release/app-staging-release.apk
+
+# Production release (for MDM distribution)
+./gradlew assembleProductionRelease
+# APK: app/build/outputs/apk/production/release/app-production-release.apk
+```
+
+### Multiple Variants on Same Device
+
+Because each flavor has a different Application ID, you can install all three simultaneously for testing/comparison.
+
+**Full documentation:** See [`docs/android-build-variants.md`](docs/android-build-variants.md)

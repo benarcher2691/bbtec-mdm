@@ -15,6 +15,30 @@ android {
         versionName = "0.0.38"
     }
 
+    // Product Flavors for different environments
+    flavorDimensions += "environment"
+    productFlavors {
+        create("local") {
+            dimension = "environment"
+            applicationIdSuffix = ".local"
+            versionNameSuffix = "-local"
+            // localhost works with physical device via adb reverse tcp:3000 tcp:3000
+            buildConfigField("String", "BASE_URL", "\"http://localhost:3000/api/client\"")
+        }
+        create("staging") {
+            dimension = "environment"
+            applicationIdSuffix = ".staging"
+            versionNameSuffix = "-staging"
+            // Points to Vercel preview deployment (development branch)
+            buildConfigField("String", "BASE_URL", "\"https://bbtec-mdm-git-development.vercel.app/api/client\"")
+        }
+        create("production") {
+            dimension = "environment"
+            // Production keeps the original applicationId (no suffix)
+            buildConfigField("String", "BASE_URL", "\"https://bbtec-mdm.vercel.app/api/client\"")
+        }
+    }
+
     signingConfigs {
         create("release") {
             storeFile = file("../bbtec-mdm.keystore")
@@ -39,6 +63,10 @@ android {
 
     kotlinOptions {
         jvmTarget = "1.8"
+    }
+
+    buildFeatures {
+        buildConfig = true  // Enable BuildConfig generation for flavor-specific constants
     }
 }
 
