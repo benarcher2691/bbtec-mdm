@@ -264,6 +264,7 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 - [ ] Policy deletion protection (prevent deleting policies with active tokens)
 - [ ] Comprehensive error handling with better error messages
 - [ ] Performance optimization (database indexes, query optimization)
+- [ ] **Multi-tenancy architecture review**: Currently single-tenant per Clerk user (each user has isolated policies/devices/tokens). Consider adding shared organization/team concept with role-based access control if multiple users need to collaborate on same device fleet. Current design works for SaaS model, but may need adjustment for internal company tool use case.
 
 ### UI/UX Polish
 - [ ] Command history UI (audit trail of all commands sent to devices)
