@@ -7,67 +7,101 @@
 
 ---
 
-## Current Status
-
-### ✅ Just Completed
-- **Offline-First Local Development** (feature/offline-local-dev)
-  - Dynamic IP detection for local development
-  - Environment-aware APK streaming (local streams, cloud redirects)
-  - Cleartext HTTP support for local flavor
-  - v1+v2 signing for certificate extraction
-  - Package name consistency (no `.local` suffix)
-  - Device enrollment working offline (HPV4CZ99 enrolled successfully)
-  - Documentation updated (android-build-variants.md v2.0)
-
-### 🎯 Ready to Promote
-- Feature branch ready for PR to development
-- All changes committed and pushed
-- Documentation complete
-
----
-
 ## Next Steps - Promotion Path
 
-### Phase 1: Merge to Development (Immediate)
-**Goal:** Test offline-first feature in staging environment
+### 🔴 Critical Issues (MUST FIX BEFORE PR)
 
-**Actions:**
-1. Create Pull Request on GitHub
-   - Source: `feature/offline-local-dev`
-   - Target: `development`
-   - Following branch protection workflow
+#### Issue #1: Preview URL Detection Bug
+**File:** `src/lib/network-detection.ts:45`
+```typescript
+const cloudUrl = configuredAppUrl || 'https://bbtec-mdm.vercel.app'
+```
 
-2. Test in Vercel Preview
-   - Preview auto-deploys with cloud dev Convex (`kindly-mule-339`)
-   - Test complete enrollment flow in staging
-   - Verify dynamic IP detection works in cloud mode
+**Problem:** When `NEXT_PUBLIC_APP_URL` is not set in Vercel preview, defaults to production URL.
 
-3. Merge After Approval
-   - Squash and merge to development
-   - Delete feature branch
+**Impact:** QR codes generated in staging will have production URL instead of preview URL.
 
-**Expected Time:** 1 day
+**Solution:** Use Vercel's `VERCEL_URL` environment variable:
+```typescript
+const cloudUrl =
+  configuredAppUrl ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+  'https://bbtec-mdm.vercel.app'
+```
 
 ---
 
-### Phase 2: Merge to Production (After Staging Validation)
-**Goal:** Deploy offline-first feature to production
+#### Issue #2: APK Signature Hardcoded to Debug Certificate
+**File:** `src/lib/apk-signature-client.ts:44`
+```typescript
+const signatureChecksum = 'iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk'
+```
 
-**Actions:**
-1. Create Pull Request on GitHub
-   - Source: `development`
-   - Target: `master`
-   - Following branch protection workflow
+**Problem:** Hardcoded to debug certificate. Staging/production use different keystores.
 
-2. Vercel Production Deploy
-   - Auto-deploys to production
-   - Uses cloud production Convex (`expert-lemur-691`)
+**Impact:** Device provisioning will fail with "signature mismatch" error.
 
-3. Smoke Test
-   - Test enrollment in production
-   - Verify all environments working
+**Solution Options:**
+1. **Environment-aware hardcoding** (quick fix - different signature per environment)
+2. **Server-side extraction** using `apksigner verify --print-certs` (reliable)
+3. **Proper PKCS#7/X.509 parsing** (complex, best long-term)
 
-**Expected Time:** 1 day (after staging validation)
+---
+
+#### Issue #3: Package Name Hardcoded
+**File:** `src/lib/apk-signature-client.ts:49`
+```typescript
+packageName: 'com.bbtec.mdm.client', // TODO: Parse from manifest
+```
+
+**Problem:** Staging uses `com.bbtec.mdm.client.staging` but code hardcodes base package.
+
+**Impact:** Minor - metadata mismatch only (provisioning uses different source).
+
+---
+
+### 📋 Pre-PR Checklist
+
+**Required Fixes:**
+- [ ] Fix preview URL detection (add `VERCEL_URL` support)
+- [ ] Build staging APK (`./gradlew assembleStagingRelease`)
+- [ ] Extract staging APK signature (`apksigner verify --print-certs`)
+- [ ] Update signature logic (choose environment-aware or extraction approach)
+- [ ] Test locally (mock Vercel environment)
+
+**Recommended:**
+- [ ] Document signature extraction process
+- [ ] Create helper script for signature extraction
+- [ ] Test full local → staging flow manually
+
+---
+
+### 🚀 Deployment Process
+
+See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for complete deployment guide.
+
+**Quick Summary:**
+
+#### Phase 1: Deploy to Staging (After Fixes)
+1. Fix critical issues above
+2. Create PR: `feature/offline-local-dev` → `development`
+3. Vercel auto-creates preview deployment
+4. Configure preview environment variables (Convex cloud dev)
+5. Deploy Convex schema to cloud dev
+6. Seed cloud dev database
+7. Test enrollment in preview
+8. Merge to development
+
+#### Phase 2: Deploy to Production (After Staging Validation)
+1. Build production APK
+2. Extract production signature
+3. Create PR: `development` → `master`
+4. Configure production environment variables
+5. Deploy Convex schema to production
+6. Smoke test enrollment
+7. Merge to master
+
+**Detailed procedures, testing checklists, and troubleshooting:** See docs/deployment-procedures.md
 
 ---
 
@@ -235,13 +269,15 @@
 **Tech Docs (docs/):**
 - `android-build-variants.md` - Android build guide (v2.0, offline-first)
 - `authentication-patterns.md` - Clerk + Convex auth best practices
+- `development-setup.md` - Multi-environment setup, Git workflow, Convex practices
+- `deployment-procedures.md` - Complete promotion and deployment guide
 
 **Project Context:**
-- `CLAUDE.md` - Project conventions, tech stack, multi-environment workflow
+- `CLAUDE.md` - Project conventions, tech stack, coding standards
 
 **Planning (planning/):**
+- `PLAN.md` - This document (current plan with actionable tasks)
 - `ROADMAP-NEXT-STEPS.md` - Long-term roadmap and feature backlog
-- `PLAN-2025-11-11.md` - This document (active plan)
 
 **Historical (planning/archive/):**
 - `2025-11-session/` - Completed planning docs and research
@@ -264,7 +300,7 @@ feature/* branches           ← Local development
 ```
 
 **Current Branch:** `feature/offline-local-dev`
-**Next Action:** Create PR to `development`
+**Next Action:** Fix critical issues, then create PR to `development`
 
 ---
 
@@ -281,6 +317,27 @@ NEXT_PRIVATE_TURBOPACK=0 npm run dev
 # Terminal 3: Build Android APK
 cd android-client
 ./gradlew clean assembleLocalDebug
+```
+
+### Build APKs for Different Environments
+```bash
+cd android-client
+
+# Local debug (for offline development)
+./gradlew clean assembleLocalDebug
+
+# Staging release (for Vercel preview testing)
+./gradlew clean assembleStagingRelease
+
+# Production release (for final deployment)
+./gradlew clean assembleProductionRelease
+```
+
+### Extract APK Signature
+```bash
+/opt/android-sdk/build-tools/34.0.0/apksigner verify --print-certs \
+  path/to/app.apk | grep SHA-256 | head -1
+# Then convert to URL-safe Base64 (no padding, +/→-_)
 ```
 
 ### Environment Switching
@@ -310,4 +367,4 @@ git push -u origin feature/your-feature-name
 
 ---
 
-**Note:** This is a living document. Update as priorities change and features complete.
+**Note:** This is a living document. Update as work progresses and priorities change.
