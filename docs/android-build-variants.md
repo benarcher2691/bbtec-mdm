@@ -195,6 +195,114 @@ jarsigner -verify -verbose -certs app/build/outputs/apk/production/release/app-p
 3. Upload to Convex APK storage (or your MDM distribution system)
 4. Deploy via QR code enrollment
 
+---
+
+## APK Signature Extraction
+
+### Overview
+
+Android device provisioning requires the APK signature checksum in URL-safe Base64 format. The system automatically extracts signatures when APKs are uploaded, but you can also extract them manually for verification or troubleshooting.
+
+### Automatic Extraction (Recommended)
+
+When you upload an APK via the web dashboard:
+
+1. APK is uploaded to Convex storage
+2. Server-side API (`/api/apk/extract-signature`) automatically:
+   - Downloads APK temporarily
+   - Runs `apksigner verify --print-certs`
+   - Extracts SHA-256 certificate digest
+   - Converts to URL-safe Base64 (no padding, `+/` → `-_`)
+   - Extracts package name via `aapt dump badging`
+   - Saves metadata to database
+3. No manual intervention required!
+
+**Implementation:** See `src/app/api/apk/extract-signature/route.ts`
+
+### Manual Extraction (For Verification)
+
+Use the helper script for manual extraction:
+
+```bash
+# Make script executable (if not already)
+chmod +x scripts/extract-apk-signature.sh
+
+# Extract signature from any APK
+./scripts/extract-apk-signature.sh <path-to-apk>
+
+# Example: Extract staging APK signature
+./scripts/extract-apk-signature.sh android-client/app/build/outputs/apk/staging/release/app-staging-release.apk
+```
+
+**Output:**
+```
+✓ Extraction complete!
+
+Package Name:      com.bbtec.mdm.client.staging
+Version Name:      0.0.39-staging
+Version Code:      39
+Signature:         U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE
+```
+
+### Known Signatures
+
+| Environment | Package Name | Signature (URL-safe Base64) |
+|-------------|--------------|----------------------------|
+| **Local** (debug) | `com.bbtec.mdm.client` | `iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk` |
+| **Staging** | `com.bbtec.mdm.client.staging` | `U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE` |
+| **Production** | `com.bbtec.mdm.client` | _(To be documented)_ |
+
+**Note:** Debug and production use the same package name but different keystores (different signatures).
+
+### Signature Format
+
+Android provisioning requires **URL-safe Base64 without padding** (RFC 4648):
+- Replace `+` with `-`
+- Replace `/` with `_`
+- Remove trailing `=` padding
+
+**Example Conversion:**
+```
+SHA-256 (hex):       53cd0e1a9e3f3a38c666842a9894ca8eb1eddcdcf4fb0e1310b3038fa71bce21
+Standard Base64:     U80OGp4/OjjGZoQqmJTKjrHt3Nz0+w4TELMDj6cbziE=
+URL-safe Base64:     U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE  ✅
+```
+
+### Troubleshooting
+
+**Problem:** Signature mismatch during device provisioning
+
+**Causes:**
+1. APK built with wrong keystore (debug vs. production)
+2. APK not uploaded to correct environment
+3. Cached metadata in database
+
+**Solution:**
+1. Extract signature from actual APK being used:
+   ```bash
+   ./scripts/extract-apk-signature.sh path/to/your.apk
+   ```
+2. Verify signature matches what's in the database
+3. If mismatch, re-upload APK (triggers automatic extraction)
+4. Rebuild APK with correct keystore if needed
+
+**Problem:** "Could not extract signature" error during upload
+
+**Causes:**
+1. APK not properly signed
+2. apksigner or aapt not found on server
+3. Corrupt APK file
+
+**Solution:**
+1. Verify APK is signed:
+   ```bash
+   /opt/android-sdk/build-tools/34.0.0/apksigner verify app.apk
+   ```
+2. Rebuild APK if necessary
+3. Check server logs for detailed error message
+
+---
+
 ## Gradle Tasks Reference
 
 ### List All Build Tasks

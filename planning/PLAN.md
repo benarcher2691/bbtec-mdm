@@ -9,19 +9,14 @@
 
 ## Next Steps - Promotion Path
 
-### 🔴 Critical Issues (MUST FIX BEFORE PR)
+### ✅ Critical Issues (RESOLVED - Ready for PR)
 
-#### Issue #1: Preview URL Detection Bug
-**File:** `src/lib/network-detection.ts:45`
-```typescript
-const cloudUrl = configuredAppUrl || 'https://bbtec-mdm.vercel.app'
-```
+#### Issue #1: Preview URL Detection Bug ✅
+**File:** `src/lib/network-detection.ts:45-52`
 
-**Problem:** When `NEXT_PUBLIC_APP_URL` is not set in Vercel preview, defaults to production URL.
+**Status:** FIXED
 
-**Impact:** QR codes generated in staging will have production URL instead of preview URL.
-
-**Solution:** Use Vercel's `VERCEL_URL` environment variable:
+**Solution Implemented:**
 ```typescript
 const cloudUrl =
   configuredAppUrl ||
@@ -29,50 +24,54 @@ const cloudUrl =
   'https://bbtec-mdm.vercel.app'
 ```
 
----
-
-#### Issue #2: APK Signature Hardcoded to Debug Certificate
-**File:** `src/lib/apk-signature-client.ts:44`
-```typescript
-const signatureChecksum = 'iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk'
-```
-
-**Problem:** Hardcoded to debug certificate. Staging/production use different keystores.
-
-**Impact:** Device provisioning will fail with "signature mismatch" error.
-
-**Solution Options:**
-1. **Environment-aware hardcoding** (quick fix - different signature per environment)
-2. **Server-side extraction** using `apksigner verify --print-certs` (reliable)
-3. **Proper PKCS#7/X.509 parsing** (complex, best long-term)
+**Result:** Preview deployments now correctly use `VERCEL_URL` instead of defaulting to production.
 
 ---
 
-#### Issue #3: Package Name Hardcoded
-**File:** `src/lib/apk-signature-client.ts:49`
-```typescript
-packageName: 'com.bbtec.mdm.client', // TODO: Parse from manifest
-```
+#### Issue #2: APK Signature Hardcoded to Debug Certificate ✅
+**File:** `src/app/api/apk/extract-signature/route.ts` (complete rewrite)
 
-**Problem:** Staging uses `com.bbtec.mdm.client.staging` but code hardcodes base package.
+**Status:** FIXED with server-side extraction
 
-**Impact:** Minor - metadata mismatch only (provisioning uses different source).
+**Solution Implemented:**
+- Server-side API endpoint extracts signature using `apksigner verify --print-certs`
+- Extracts package name using `aapt dump badging`
+- Converts SHA-256 to URL-safe Base64 automatically
+- No hardcoded values - works with any APK
+
+**Documented Signatures:**
+- **Debug (local):** `iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk`
+- **Staging:** `U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE`
+
+**Helper Script:** `scripts/extract-apk-signature.sh` for manual extraction
+
+---
+
+#### Issue #3: Package Name Hardcoded ✅
+**File:** `src/lib/apk-signature-client.ts` (updated)
+
+**Status:** FIXED with server-side extraction
+
+**Solution Implemented:**
+- Client-side now returns placeholders after validation
+- Server-side extracts actual package name from APK manifest
+- Upload flow updated to use server-extracted metadata
 
 ---
 
 ### 📋 Pre-PR Checklist
 
 **Required Fixes:**
-- [ ] Fix preview URL detection (add `VERCEL_URL` support)
-- [ ] Build staging APK (`./gradlew assembleStagingRelease`)
-- [ ] Extract staging APK signature (`apksigner verify --print-certs`)
-- [ ] Update signature logic (choose environment-aware or extraction approach)
-- [ ] Test locally (mock Vercel environment)
+- [x] Fix preview URL detection (add `VERCEL_URL` support)
+- [x] Build staging APK (`./gradlew assembleStagingRelease`)
+- [x] Extract staging APK signature (`apksigner verify --print-certs`)
+- [x] Update signature logic (implemented server-side extraction)
+- [x] Test locally (basic sanity checks passed)
 
 **Recommended:**
-- [ ] Document signature extraction process
-- [ ] Create helper script for signature extraction
-- [ ] Test full local → staging flow manually
+- [x] Document signature extraction process
+- [x] Create helper script for signature extraction (`scripts/extract-apk-signature.sh`)
+- [ ] Test full local → staging flow manually (deferred to Vercel preview)
 
 ---
 
