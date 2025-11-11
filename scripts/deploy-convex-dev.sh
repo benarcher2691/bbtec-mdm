@@ -7,7 +7,7 @@ echo "📦 Deploying to Convex cloud dev (kindly-mule-339)..."
 cp .env.local .env.local.backup
 
 # Deploy to cloud dev
-CONVEX_DEPLOYMENT=prod:kindly-mule-339 npx convex dev --once
+CONVEX_DEPLOYMENT=dev:kindly-mule-339 npx convex dev --once
 
 # Restore original .env.local
 mv .env.local.backup .env.local
