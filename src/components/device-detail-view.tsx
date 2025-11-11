@@ -17,7 +17,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Smartphone, Calendar, Wifi, HardDrive, Package, Download, AlertCircle, Check } from "lucide-react"
-import { installAppOnDevice } from "@/app/actions/android-management"
 import type { Id } from "../../convex/_generated/dataModel"
 
 interface Device {
@@ -58,6 +57,7 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
   const [updatingInterval, setUpdatingInterval] = useState(false)
 
   const updatePingInterval = useMutation(api.deviceClients.updatePingInterval)
+  const createInstallCommand = useMutation(api.installCommands.create)
 
   const getDeviceId = (deviceName: string) => {
     const parts = deviceName.split('/')
@@ -168,23 +168,21 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
       const baseUrl = window.location.origin
       const apkUrl = `${baseUrl}/api/apps/${app.storageId}`
 
-      const result = await installAppOnDevice(
+      // Create installation command via Convex
+      await createInstallCommand({
         deviceId,
-        app.packageName,
-        apkUrl
-      )
+        packageName: app.packageName,
+        apkUrl,
+        appName: app.name,
+      })
 
-      if (result.success) {
-        setInstallSuccess(true)
-        // Auto-close after showing success message
-        setTimeout(() => {
-          setInstallDialogOpen(false)
-          setInstallSuccess(false)
-          setSelectedApp(null)
-        }, 3000)
-      } else {
-        setInstallError(result.error || 'Failed to install app')
-      }
+      setInstallSuccess(true)
+      // Auto-close after showing success message
+      setTimeout(() => {
+        setInstallDialogOpen(false)
+        setInstallSuccess(false)
+        setSelectedApp(null)
+      }, 3000)
     } catch (err) {
       setInstallError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
