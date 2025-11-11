@@ -2,15 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ConvexHttpClient } from 'convex/browser'
 import { api } from '../../../../../convex/_generated/api'
 import { auth } from '@clerk/nextjs/server'
+import { writeFile, unlink } from 'fs/promises'
+import { join } from 'path'
+import { tmpdir } from 'os'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+
+const execPromise = promisify(exec)
 
 /**
  * Extract APK Signature Server-Side
- * Downloads APK from Convex storage and calculates correct signature
+ * Downloads APK from Convex storage and calculates correct signature using apksigner
  *
- * This fixes the client-side parser which hashes the entire .RSA file
- * instead of just the certificate
+ * This replaces the client-side parser which couldn't properly extract certificate data
  */
 export async function POST(request: NextRequest) {
+  let tempFilePath: string | null = null
+
   try {
     const { getToken } = await auth()
     const token = await getToken({ template: 'convex' })
@@ -39,6 +47,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log('[APK-EXTRACT] Downloading APK from:', downloadUrl)
+
     // Download APK
     const apkResponse = await fetch(downloadUrl)
     if (!apkResponse.ok) {
@@ -50,19 +60,91 @@ export async function POST(request: NextRequest) {
 
     const apkBuffer = await apkResponse.arrayBuffer()
 
-    // For now, return a placeholder
-    // TODO: Implement proper PKCS#7/X.509 parsing
-    // The signature will need to be extracted manually or use a Java tool
+    // Save to temporary file
+    tempFilePath = join(tmpdir(), `apk-${Date.now()}-${Math.random().toString(36).substring(7)}.apk`)
+    await writeFile(tempFilePath, Buffer.from(apkBuffer))
+
+    console.log('[APK-EXTRACT] Saved to temp file:', tempFilePath)
+
+    // Extract signature using apksigner
+    const apksignerPath = '/opt/android-sdk/build-tools/34.0.0/apksigner'
+    console.log('[APK-EXTRACT] Running apksigner...')
+
+    const { stdout: certOutput } = await execPromise(
+      `${apksignerPath} verify --print-certs "${tempFilePath}"`
+    )
+
+    // Parse SHA-256 digest from output
+    const sha256Match = certOutput.match(/Signer #\d+ certificate SHA-256 digest: ([a-f0-9]+)/i)
+    if (!sha256Match) {
+      throw new Error('Could not extract SHA-256 digest from apksigner output')
+    }
+
+    const sha256Hex = sha256Match[1]
+    console.log('[APK-EXTRACT] SHA-256 hex:', sha256Hex)
+
+    // Convert hex to URL-safe Base64
+    const signatureChecksum = Buffer.from(sha256Hex, 'hex')
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+
+    console.log('[APK-EXTRACT] Signature checksum:', signatureChecksum)
+
+    // Extract package name using aapt
+    const aaptPath = '/opt/android-sdk/build-tools/34.0.0/aapt'
+    console.log('[APK-EXTRACT] Running aapt...')
+
+    const { stdout: aaptOutput } = await execPromise(
+      `${aaptPath} dump badging "${tempFilePath}" | grep "package: name"`
+    )
+
+    // Parse package name from aapt output
+    // Format: package: name='com.bbtec.mdm.client.staging' versionCode='39' versionName='0.0.39-staging' ...
+    const packageMatch = aaptOutput.match(/package: name='([^']+)'/)
+    const versionNameMatch = aaptOutput.match(/versionName='([^']+)'/)
+    const versionCodeMatch = aaptOutput.match(/versionCode='(\d+)'/)
+
+    if (!packageMatch) {
+      throw new Error('Could not extract package name from aapt output')
+    }
+
+    const packageName = packageMatch[1]
+    const versionName = versionNameMatch ? versionNameMatch[1] : 'unknown'
+    const versionCode = versionCodeMatch ? parseInt(versionCodeMatch[1], 10) : 0
+
+    console.log('[APK-EXTRACT] Package name:', packageName)
+    console.log('[APK-EXTRACT] Version:', versionName, `(${versionCode})`)
+
+    // Clean up temp file
+    await unlink(tempFilePath)
+    tempFilePath = null
 
     return NextResponse.json({
       success: true,
-      message: 'Signature extraction requires Java/keytool. Use manual entry.',
-      signatureChecksum: 'U80OGp4/OjjGZoQqmJTKjrHt3Nz0+w4TELMDj6cbziE=', // Hardcoded for now
+      signatureChecksum,
+      packageName,
+      versionName,
+      versionCode,
     })
   } catch (error) {
-    console.error('Signature extraction error:', error)
+    console.error('[APK-EXTRACT] Error:', error)
+
+    // Clean up temp file if it exists
+    if (tempFilePath) {
+      try {
+        await unlink(tempFilePath)
+      } catch (cleanupError) {
+        console.error('[APK-EXTRACT] Failed to clean up temp file:', cleanupError)
+      }
+    }
+
     return NextResponse.json(
-      { error: 'Failed to extract signature' },
+      {
+        error: 'Failed to extract APK metadata',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }

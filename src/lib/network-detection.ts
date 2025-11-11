@@ -42,8 +42,17 @@ export function detectServerUrl(logPrefix = '[NETWORK-DETECTION]'): NetworkDetec
 
   // CLOUD MODE: Use configured URL (staging/production)
   if (!isLocalConvex) {
-    const cloudUrl = configuredAppUrl || 'https://bbtec-mdm.vercel.app'
+    // Priority:
+    // 1. NEXT_PUBLIC_APP_URL (explicitly configured)
+    // 2. VERCEL_URL (auto-provided by Vercel for preview/production)
+    // 3. Production fallback
+    const cloudUrl =
+      configuredAppUrl ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      'https://bbtec-mdm.vercel.app'
+
     console.log(`${logPrefix} Cloud mode - using configured URL: ${cloudUrl}`)
+    console.log(`${logPrefix} Detection sources - NEXT_PUBLIC_APP_URL: ${configuredAppUrl || 'not set'}, VERCEL_URL: ${process.env.VERCEL_URL || 'not set'}`)
 
     return {
       serverUrl: cloudUrl,
