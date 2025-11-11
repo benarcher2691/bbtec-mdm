@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "convex:deploy:dev": "./scripts/deploy-convex-dev.sh",
+    "convex:deploy:prod": "./scripts/deploy-convex-prod.sh"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.34.1",

@@ -400,17 +400,28 @@ cd android-client
 # Then convert to URL-safe Base64 (no padding, +/→-_)
 ```
 
+### Deploy Convex Schema
+```bash
+# Deploy to cloud dev (staging) - preserves local .env.local
+npm run convex:deploy:dev
+
+# Deploy to cloud production - preserves local .env.local
+npm run convex:deploy:prod
+
+# Or use scripts directly:
+./scripts/deploy-convex-dev.sh
+./scripts/deploy-convex-prod.sh
+```
+
 ### Environment Switching
 ```bash
-# Local → Cloud Dev
-# Update .env.local:
-NEXT_PUBLIC_CONVEX_URL=https://kindly-mule-339.convex.cloud
-CONVEX_DEPLOYMENT=prod:kindly-mule-339
+# DON'T manually switch .env.local anymore!
+# Use deployment scripts above instead (they preserve local settings)
 
-# Cloud Dev → Production
-# Update .env.local:
-NEXT_PUBLIC_CONVEX_URL=https://expert-lemur-691.convex.cloud
-CONVEX_DEPLOYMENT=prod:expert-lemur-691
+# For reference, environments are:
+# Local: http://127.0.0.1:3210 (CONVEX_DEPLOYMENT=local:local-ben_archer2691-bbtec_mdm)
+# Cloud Dev: https://kindly-mule-339.convex.cloud (CONVEX_DEPLOYMENT=prod:kindly-mule-339)
+# Production: https://expert-lemur-691.convex.cloud (CONVEX_DEPLOYMENT=prod:expert-lemur-691)
 ```
 
 ### Git Operations

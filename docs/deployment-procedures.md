@@ -94,14 +94,15 @@ CLERK_ISSUER_URL=https://living-skunk-13.clerk.accounts.dev
 ### Step 4: Deploy Convex Schema to Cloud Dev
 
 ```bash
-# Deploy schema and functions to cloud dev
-npx convex deploy --prod kindly-mule-339
+# Deploy schema and functions to cloud dev (preserves local .env.local)
+npm run convex:deploy:dev
 ```
 
 **What this does:**
-- Uploads schema changes to cloud dev Convex
+- Uploads schema changes to cloud dev Convex (kindly-mule-339)
 - Deploys all mutations/queries
 - Does NOT deploy frontend (Vercel handles that)
+- Preserves your local .env.local settings (prevents accidental environment switch)
 
 **When to run:**
 - After modifying `convex/schema.ts`
@@ -310,11 +311,16 @@ NEXT_PUBLIC_APP_URL=https://bbtec-mdm.vercel.app
 ### Step 6: Deploy Convex Schema to Production
 
 ```bash
-# Deploy schema and functions to production Convex
-npx convex deploy --prod expert-lemur-691
+# Deploy schema and functions to production Convex (preserves local .env.local)
+npm run convex:deploy:prod
 ```
 
 **Critical:** Always deploy Convex schema BEFORE merging PR to master.
+
+**What this does:**
+- Uploads schema changes to production Convex (expert-lemur-691)
+- Requires confirmation before deploying (safety check)
+- Preserves your local .env.local settings
 
 **Why:** Vercel production deploy happens automatically when PR merges. Frontend code may expect new schema fields.
 
@@ -433,7 +439,7 @@ git push origin master
 ```bash
 # Convex doesn't have built-in rollback
 # May need to manually revert schema changes
-npx convex deploy --prod expert-lemur-691
+npm run convex:deploy:prod
 ```
 
 ---
@@ -545,8 +551,8 @@ npx convex deploy --prod expert-lemur-691
 **Solutions:**
 ```bash
 # Deploy schema to correct environment
-npx convex deploy --prod kindly-mule-339   # Staging
-npx convex deploy --prod expert-lemur-691  # Production
+npm run convex:deploy:dev   # Staging
+npm run convex:deploy:prod  # Production
 ```
 
 **Prevention:** Always deploy Convex schema BEFORE deploying frontend

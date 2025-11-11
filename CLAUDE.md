@@ -193,7 +193,8 @@ Uses `.env.local` pointing to cloud dev deployment.
 
 - **Type checking**: `npm run type-check` (if available)
 - **Linting**: `npm run lint`
-- **Deploy Convex schema**: `npx convex deploy` (production deployment)
+- **Deploy Convex to cloud dev**: `npm run convex:deploy:dev` (preserves local .env.local)
+- **Deploy Convex to production**: `npm run convex:deploy:prod` (preserves local .env.local)
 
 ## Git Workflow
 

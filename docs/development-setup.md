@@ -251,15 +251,20 @@ git push -u origin feature/your-feature-name
 **CRITICAL:** After modifying `convex/schema.ts` or any Convex functions:
 
 ```bash
-npx convex deploy
+# Deploy to cloud dev (staging)
+npm run convex:deploy:dev
+
+# Deploy to production
+npm run convex:deploy:prod
 ```
 
 **Why this matters:**
 - Schema changes are NOT automatically deployed
 - Frontend deployment (Vercel) does NOT deploy Convex backend
 - Symptoms of missing deployment: crashes, missing fields, "field not found" errors
+- These scripts preserve your local .env.local settings
 
-**Always ask before deploying:** "Should I run `npx convex deploy` to deploy schema changes?"
+**Always ask before deploying:** "Should I run deployment scripts to deploy schema changes?"
 
 ### Optional Fields
 
@@ -361,8 +366,11 @@ npm run type-check
 
 ### Deployment
 ```bash
+# Deploy Convex schema/functions to cloud dev (staging)
+npm run convex:deploy:dev
+
 # Deploy Convex schema/functions to production
-npx convex deploy
+npm run convex:deploy:prod
 
 # Vercel deployments happen automatically via Git push
 # (no manual command needed)
@@ -408,7 +416,11 @@ NEXT_PRIVATE_TURBOPACK=0 npm run dev
 
 **Solution:**
 ```bash
-npx convex deploy
+# Deploy to cloud dev (staging)
+npm run convex:deploy:dev
+
+# Deploy to production
+npm run convex:deploy:prod
 ```
 
 Schema changes are NOT automatically deployed. Always deploy after modifying `convex/schema.ts`.
