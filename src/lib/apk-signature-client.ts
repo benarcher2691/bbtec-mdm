@@ -38,15 +38,17 @@ export async function parseApkMetadataClient(file: File): Promise<ApkMetadata> {
     // TEMPORARY FIX: Client-side signature extraction is complex (PKCS#7 parsing)
     // Since we only have one keystore, hardcode the correct signature
     // TODO: Implement proper PKCS#7/X.509 certificate extraction
-    // NOTE: Must use URL-safe base64 without padding for Android provisioning
-    const signatureChecksum = 'U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE'
+    // IMPORTANT: Must use URL-safe base64 WITHOUT PADDING for Android provisioning
+    // Standard Base64: iFlIwQLMpbKE/1YZ5L+UHXMSmeKsHCwvJRsm7kgkblk=
+    // URL-safe (RFC 4648): iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk (no padding, +/→-_)
+    const signatureChecksum = 'iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk'
 
     // For now, return placeholder values for manifest parsing
     // TODO: Implement binary XML parser or extract from APK filename
     return {
       packageName: 'com.bbtec.mdm.client', // TODO: Parse from manifest
       versionName: extractVersionFromFilename(file.name),
-      versionCode: 3, // Hardcoded - matches build.gradle.kts
+      versionCode: 39, // Hardcoded - matches build.gradle.kts (local debug version)
       signatureChecksum,
     }
   } catch (error) {

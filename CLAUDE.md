@@ -7,7 +7,7 @@ This file provides context for Claude Code when working on this project.
 
 ## Project Overview
 
-Educational Android Mobile Device Management (MDM) system built with Android Management API. Allows creation of enrollment tokens, QR code generation, and device management for Android Enterprise devices.
+Educational Android Mobile Device Management (MDM) system for managing Android Enterprise devices. Allows creation of enrollment tokens, QR code generation, APK distribution, and device management.
 
 ## Tech Stack
 
@@ -19,7 +19,7 @@ Educational Android Mobile Device Management (MDM) system built with Android Man
 
 ## Architecture Principles
 
-1. **Server Actions**: Use sparingly, only for auth/session bridging or Android Management API calls
+1. **Server Actions**: Use sparingly, only for auth/session bridging or device management operations
 2. **Data Operations**: All CRUD operations go through Convex queries/mutations
 3. **Realtime First**: Leverage Convex's built-in realtime capabilities
 4. **Type Safety**: Strict TypeScript throughout - NEVER use `any` type
@@ -98,6 +98,73 @@ NEXT_PRIVATE_TURBOPACK=0 npm run dev
 - ✅ **Isolated database** (changes don't affect dev/prod)
 - ✅ **Fast iteration** (no network latency)
 - ✅ **Local Convex dashboard** available
+- ✅ **Dynamic IP detection** (automatically detects LAN IP for device enrollment)
+
+### Dynamic IP Detection (Local Development)
+
+**Problem:** When your development machine's IP changes (DHCP reassignment, different network), QR codes with hardcoded IPs break.
+
+**Solution:** Automatic LAN IP detection for local development only.
+
+#### How It Works
+
+```
+┌─────────────────────┐
+│  Enrollment Page    │
+│  (Browser)          │
+└──────────┬──────────┘
+           │ Fetch LAN IP
+           ▼
+┌─────────────────────┐
+│ /api/network-info   │
+│ (detects actual IP) │
+└──────────┬──────────┘
+           │ Returns: http://192.168.1.13:3000
+           ▼
+┌─────────────────────┐
+│ QR Code Generated   │
+│ (with detected IP)  │
+└─────────────────────┘
+```
+
+#### Environment Behavior
+
+- **Local** (`NEXT_PUBLIC_CONVEX_URL` contains `127.0.0.1`):
+  - Detects actual LAN IP from network interfaces
+  - Automatically updates when IP changes
+  - APK downloaded via streaming (offline-friendly)
+  - Shows detected IP in enrollment UI
+
+- **Cloud** (staging/production on Vercel):
+  - Uses configured `NEXT_PUBLIC_APP_URL`
+  - No dynamic detection (not needed)
+  - APK redirected to Convex CDN (efficient)
+
+#### Files Involved
+
+- **`/src/lib/network-detection.ts`** - Core detection logic (shared utility)
+- **`/src/app/api/network-info/route.ts`** - API endpoint for client-side consumption
+- **`/src/hooks/useServerUrl.ts`** - React hook for components
+- **`/src/app/actions/enrollment.ts`** - Server action uses detection for QR generation
+- **`/src/components/qr-code-generator.tsx`** - Displays detected network info
+
+#### Logs to Watch
+
+```bash
+[NETWORK-INFO] Environment detected: local/cloud
+[NETWORK-INFO] Detected LAN IP: 192.168.1.13 (wlan0)
+[NETWORK-INFO] Server URL: http://192.168.1.13:3000
+[QR-GEN] Network detection result: {...}
+```
+
+#### When IP Changes
+
+1. Restart Next.js dev server
+2. Enrollment page auto-detects new IP
+3. Generate new QR code (old ones have old IP)
+4. Test enrollment with new QR
+
+**No manual configuration needed!** 🎉
 
 ### Alternative: Cloud Dev Workflow
 
@@ -177,7 +244,7 @@ feature/* branches           ← Local development
 
 ## Platform Management: Web UI First, CLI Later
 
-**Philosophy:** Use web dashboards (Vercel, Convex, Google Cloud Console) for learning and setup. Graduate to CLI commands when you understand the platform and need automation.
+**Philosophy:** Use web dashboards (Vercel, Convex) for learning and setup. Graduate to CLI commands when you understand the platform and need automation.
 
 ### Why This Matters
 
@@ -235,12 +302,6 @@ feature/* branches           ← Local development
   - Example: `{ name: name || undefined }` ✅ NOT `{ name: name || null }` ❌
   - TypeScript error: "Type 'null' is not assignable to type 'string | undefined'"
 
-### Android Management API
-- All API calls must be server-side (Next.js Server Actions or API routes)
-- Never expose service account credentials to client
-- Enterprise name format: `enterprises/LC03fy18qv`
-- Tokens expire and should be tracked in database
-
 ## Environment Variables
 
 ### Local Development (`.env.local`)
@@ -254,11 +315,6 @@ CONVEX_DEPLOYMENT=local:local-ben_archer2691-bbtec_mdm
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
 CLERK_ISSUER_URL=https://living-skunk-13.clerk.accounts.dev
-
-# Android Management API
-GOOGLE_APPLICATION_CREDENTIALS=./config/service-account-key.json
-ENTERPRISE_NAME=enterprises/LC03fy18qv
-GOOGLE_CLOUD_PROJECT_ID=bbtec-mdm
 
 # Next.js
 NODE_ENV=development

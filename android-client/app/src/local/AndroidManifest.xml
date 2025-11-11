@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        LOCAL FLAVOR ONLY: Allow cleartext (HTTP) traffic
+
+        This is required for local development where the device connects to:
+        - Next.js dev server on LAN: http://192.168.1.13:3000
+
+        Android 9+ (API 28+) blocks cleartext traffic by default for security.
+        This override applies ONLY to the "local" flavor (localDebug build).
+
+        Production and staging flavors use HTTPS, so this won't affect them.
+    -->
+    <application
+        android:usesCleartextTraffic="true" />
+</manifest>
