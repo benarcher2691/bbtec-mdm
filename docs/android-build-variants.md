@@ -205,17 +205,27 @@ Android device provisioning requires the APK signature checksum in URL-safe Base
 
 ### Automatic Extraction (Recommended)
 
-When you upload an APK via the web dashboard:
+The system uses a **hybrid extraction approach** that works in all environments:
 
+#### Local Development (with Android SDK):
 1. APK is uploaded to Convex storage
-2. Server-side API (`/api/apk/extract-signature`) automatically:
-   - Downloads APK temporarily
-   - Runs `apksigner verify --print-certs`
-   - Extracts SHA-256 certificate digest
-   - Converts to URL-safe Base64 (no padding, `+/` → `-_`)
-   - Extracts package name via `aapt dump badging`
-   - Saves metadata to database
-3. No manual intervention required!
+2. Server-side API (`/api/apk/extract-signature`) downloads APK temporarily
+3. Runs `apksigner verify --print-certs` to extract real signature
+4. Runs `aapt dump badging` to extract package name and version
+5. Converts SHA-256 to URL-safe Base64 (no padding, `+/` → `-_`)
+6. Saves extracted metadata to database
+7. ✅ **Dynamic extraction** - works with any APK you build
+
+#### Cloud Deployment (Vercel - no Android SDK):
+1. APK is uploaded to Convex storage
+2. Server-side API tries to run apksigner
+3. Tools not found → gracefully falls back to environment detection
+4. Returns correct signature based on environment:
+   - **Preview/Production:** `U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE` (release keystore)
+   - **Local/Unknown:** `iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk` (debug keystore)
+5. ✅ **Environment-aware fallback** - works without Android SDK tools
+
+**Key Insight:** Staging and production use the **same keystore**, so they have the **same signature**. Signatures don't change with version bumps (v0.0.39 → v0.0.40), only with keystore rotation.
 
 **Implementation:** See `src/app/api/apk/extract-signature/route.ts`
 
