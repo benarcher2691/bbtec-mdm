@@ -13,14 +13,18 @@ The BBTEC MDM Android client uses **Product Flavors** to support multiple enviro
 
 | Flavor | Server URL | Application ID | Version Suffix | Use Case |
 |--------|------------|----------------|----------------|----------|
-| **local** | `http://localhost:3000/api/client` | `com.bbtec.mdm.client.local` | `-local` | Local development on physical device |
+| **local** | `http://<detected-lan-ip>:3000/api/client` | `com.bbtec.mdm.client` | `-local` | Local development (auto-detects LAN IP) |
 | **staging** | `https://bbtec-mdm-git-development.vercel.app/api/client` | `com.bbtec.mdm.client.staging` | `-staging` | Testing against Vercel preview |
 | **production** | `https://bbtec-mdm.vercel.app/api/client` | `com.bbtec.mdm.client` | (none) | Production deployment |
 
 ### Build Types
 
-- **debug**: Unsigned, debuggable build (development/testing)
-- **release**: Signed with keystore, optimized (production/staging distribution)
+- **debug**: Signed with debug certificate (v1+v2), debuggable build (development/testing)
+- **release**: Signed with production keystore (v1+v2), optimized (production/staging distribution)
+
+**Important:** Both debug and release builds now use v1+v2 signing:
+- **v1 (JAR signing)**: Creates META-INF/CERT.RSA for certificate extraction
+- **v2 (APK Signature Scheme v2)**: Modern Android signing for faster verification
 
 ### Variants
 
@@ -31,6 +35,82 @@ Gradle combines **Flavors × BuildTypes** to create variants:
 - `stagingRelease` - Staging, signed for distribution
 - `productionDebug` - Production, debuggable (rarely used)
 - `productionRelease` - **Production, signed for MDM distribution**
+
+## Offline-First Local Development
+
+### Dynamic IP Detection
+
+The web dashboard automatically detects your LAN IP address for local development, eliminating the need for hardcoded IPs or tunnels (ngrok/localtunnel).
+
+**How it works:**
+1. Next.js server detects if Convex URL contains "127.0.0.1" (local mode)
+2. In local mode: Server scans `os.networkInterfaces()` to find your LAN IP (e.g., 192.168.1.13)
+3. QR codes embed this detected IP instead of "localhost"
+4. Android devices on the same LAN can reach your dev machine directly
+
+**Key files:**
+- `src/lib/network-detection.ts` - Shared detection utility
+- `src/app/api/network-info/route.ts` - API endpoint for client-side detection
+- `src/hooks/useServerUrl.ts` - React hook for components
+
+**Benefits:**
+- ✅ No internet required (true offline development)
+- ✅ No tunnels needed (ngrok/localtunnel)
+- ✅ IP changes handled automatically (DHCP reassignment)
+- ✅ Environment-aware (local/cloud auto-detected)
+
+### Environment-Aware APK Distribution
+
+The system behaves differently based on whether you're running local or cloud Convex:
+
+| Environment | APK Download Behavior | Why |
+|-------------|----------------------|-----|
+| **Local** (127.0.0.1:3210) | Next.js streams APK bytes to device | Localhost URLs unreachable from devices |
+| **Cloud** (*.convex.cloud) | Redirects to Convex CDN URL | Efficient, no bandwidth through our server |
+
+**Detection logic:** Checks if `downloadUrl` contains "127.0.0.1:3210" in `/api/apps/[storageId]/route.ts`
+
+### Cleartext HTTP Support (Local Only)
+
+Android 9+ blocks HTTP traffic by default. The local flavor includes a manifest override to allow HTTP connections:
+
+**File:** `android-client/app/src/local/AndroidManifest.xml`
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- LOCAL FLAVOR ONLY: Allow cleartext (HTTP) traffic -->
+    <application android:usesCleartextTraffic="true" />
+</manifest>
+```
+
+**Security:** This configuration only applies to the local debug flavor. Staging and production use HTTPS exclusively.
+
+### Local Development Workflow
+
+```bash
+# Terminal 1: Start Convex local backend
+npx convex dev --local
+# → Runs on http://127.0.0.1:3210 (offline database at ~/.convex/)
+
+# Terminal 2: Start Next.js dev server
+NEXT_PRIVATE_TURBOPACK=0 npm run dev
+# → Auto-detects LAN IP (e.g., http://192.168.1.13:3000)
+# → Check logs for: [NETWORK-DETECTION] Detected LAN IP
+
+# Terminal 3: Build and test Android client
+cd android-client
+./gradlew clean assembleLocalDebug
+# → APK: app/build/outputs/apk/local/debug/app-local-debug.apk
+
+# Generate QR code in web dashboard
+# → Scan QR with factory-reset Android device
+# → Device downloads APK and enrolls (all offline!)
+```
+
+**Important Notes:**
+- No `adb reverse` needed (devices connect via LAN IP)
+- No USB cable required (works over WiFi)
+- APK signature must match database (URL-safe Base64 without padding)
+- Package name must match exactly (`com.bbtec.mdm.client`)
 
 ## Build Commands
 
@@ -53,17 +133,21 @@ cd android-client
 # Verify installation
 adb shell pm list packages | grep bbtec
 
-# Expected output: com.bbtec.mdm.client.local
+# Expected output: com.bbtec.mdm.client (same as production - no .local suffix)
 ```
 
 **APK Location:** `app/build/outputs/apk/local/debug/app-local-debug.apk`
 
-**Testing Workflow:**
-1. Start Next.js dev server: `npm run dev` (in project root)
-2. Start Convex local backend: `npx convex dev --local` (in project root)
-3. Forward port: `adb reverse tcp:3000 tcp:3000`
-4. Install APK: `./gradlew installLocalDebug`
-5. Test on physical device (app connects to laptop's localhost:3000)
+**Testing Workflow (Offline-First):**
+1. Start Convex local backend: `npx convex dev --local` (in project root)
+2. Start Next.js dev server: `NEXT_PRIVATE_TURBOPACK=0 npm run dev` (in project root)
+   - Watch logs for: `[NETWORK-DETECTION] Detected LAN IP: 192.168.x.x`
+3. Build and upload APK in web dashboard (or use pre-built from artifacts/)
+4. Generate enrollment QR code (includes auto-detected LAN IP)
+5. Factory reset Android device and scan QR code
+6. Device downloads APK and enrolls (all over LAN, no internet needed!)
+
+**Note:** No `adb reverse` or USB cable required - devices connect over WiFi via detected LAN IP
 
 ### Staging Testing (Vercel Preview)
 
@@ -161,8 +245,10 @@ android {
     productFlavors {
         create("local") {
             dimension = "environment"
-            applicationIdSuffix = ".local"
+            // Note: No applicationIdSuffix for local - keeps base package name
+            // This means you can't install local + production at the same time
             versionNameSuffix = "-local"
+            // localhost works with dynamic IP detection (server auto-detects LAN IP)
             buildConfigField("String", "BASE_URL", "\"http://localhost:3000/api/client\"")
         }
         create("staging") {
@@ -173,12 +259,30 @@ android {
         }
         create("production") {
             dimension = "environment"
+            // Production keeps the original applicationId (no suffix)
             buildConfigField("String", "BASE_URL", "\"https://bbtec-mdm.vercel.app/api/client\"")
         }
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // Enable both v1 (JAR) and v2 signing for compatibility
+            // v1 is needed for parsing code that looks for META-INF/ certificates
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+        create("release") {
+            storeFile = file("../bbtec-mdm.keystore")
+            storePassword = "android"
+            keyAlias = "bbtec-mdm"
+            keyPassword = "android"
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+
     buildFeatures {
-        buildConfig = true  // Enable BuildConfig generation
+        buildConfig = true  // Enable BuildConfig generation for flavor-specific constants
     }
 }
 ```
@@ -203,9 +307,10 @@ During build, Gradle generates `BuildConfig.java` for each variant:
 **Local Debug:**
 ```java
 public final class BuildConfig {
-  public static final String APPLICATION_ID = "com.bbtec.mdm.client.local";
-  public static final String VERSION_NAME = "0.0.38-local";
+  public static final String APPLICATION_ID = "com.bbtec.mdm.client";
+  public static final String VERSION_NAME = "0.0.39-local";
   public static final String BASE_URL = "http://localhost:3000/api/client";
+  public static final boolean DEBUG = true;
 }
 ```
 
@@ -213,10 +318,16 @@ public final class BuildConfig {
 ```java
 public final class BuildConfig {
   public static final String APPLICATION_ID = "com.bbtec.mdm.client";
-  public static final String VERSION_NAME = "0.0.38";
+  public static final String VERSION_NAME = "0.0.39";
   public static final String BASE_URL = "https://bbtec-mdm.vercel.app/api/client";
+  public static final boolean DEBUG = false;
 }
 ```
+
+**Note:** Local and production now share the same APPLICATION_ID. This means:
+- ✅ Provisioning QR codes work identically (no package name mismatch)
+- ⚠️ Cannot install local + production simultaneously (package conflict)
+- ✅ Install staging alongside local/production (staging has `.staging` suffix)
 
 ## Testing on Physical Device
 
@@ -284,46 +395,76 @@ adb reverse tcp:3000 tcp:3000
 
 ## Multiple Variants on Same Device
 
-Because each flavor has a different Application ID, you can install all three simultaneously:
+**Important:** Local and production variants now share the same package name (`com.bbtec.mdm.client`), so they **cannot** be installed simultaneously.
+
+**What you can install together:**
+- ✅ Local + Staging (different package names)
+- ✅ Production + Staging (different package names)
+- ❌ Local + Production (same package name - will conflict)
 
 ```bash
-# Install all three flavors
+# Install local debug + staging
 ./gradlew installLocalDebug
 ./gradlew installStagingRelease
-./gradlew installProductionRelease
 
-# Verify all installed
+# Verify installed
 adb shell pm list packages | grep bbtec
 
-# Output:
-# com.bbtec.mdm.client.local
-# com.bbtec.mdm.client.staging
-# com.bbtec.mdm.client
+# Expected output:
+# com.bbtec.mdm.client         (local debug)
+# com.bbtec.mdm.client.staging (staging release)
 ```
 
+**Why this change?**
+Android provisioning requires the APK package name to match exactly what's in the QR code. By removing the `.local` suffix, we ensure:
+- ✅ Same QR code format for local and production testing
+- ✅ No "Can't set up device" errors from package mismatch
+- ✅ Consistent provisioning flow across environments
+
 **Use Case:**
-- Compare behavior across environments
-- Test production while developing locally
-- QA testing with staging and production side-by-side
+- Test staging while developing locally
+- Compare staging vs local behavior
+- QA can test staging alongside local development builds
 
 ## Signing Configuration
 
-Production and staging releases are signed with the keystore configured in `build.gradle.kts`:
+All builds (debug and release) use **v1 + v2 signing** for maximum compatibility:
 
 ```kotlin
 signingConfigs {
+    getByName("debug") {
+        // Debug builds: v1+v2 signing for certificate extraction
+        enableV1Signing = true  // Creates META-INF/CERT.RSA
+        enableV2Signing = true  // Modern APK signing
+    }
     create("release") {
         storeFile = file("../bbtec-mdm.keystore")
         storePassword = "android"
         keyAlias = "bbtec-mdm"
         keyPassword = "android"
+        enableV1Signing = true
+        enableV2Signing = true
     }
 }
 ```
 
+**Why v1 + v2 Signing?**
+- **v1 (JAR signing)**: Creates `META-INF/CERT.RSA` file needed for certificate extraction in web dashboard
+- **v2 (APK Signature Scheme v2)**: Modern Android signing with faster verification
+- **Compatibility**: v1 ensures older APK parsing code can extract certificates
+
 **Verify Signing:**
 ```bash
-jarsigner -verify -verbose -certs app/build/outputs/apk/production/release/app-production-release.apk
+# Check signing schemes
+/opt/android-sdk/build-tools/34.0.0/apksigner verify --verbose app/build/outputs/apk/local/debug/app-local-debug.apk
+
+# Expected output:
+# Verified using v1 scheme (JAR signing): true
+# Verified using v2 scheme (APK Signature Scheme v2): true
+
+# Extract certificate (v1 method)
+unzip -l app/build/outputs/apk/local/debug/app-local-debug.apk | grep META-INF
+# Should show: META-INF/CERT.RSA, META-INF/CERT.SF, META-INF/MANIFEST.MF
 ```
 
 ## Troubleshooting
@@ -344,9 +485,49 @@ jarsigner -verify -verbose -certs app/build/outputs/apk/production/release/app-p
 **Problem:** Release APK not signed with keystore.
 **Solution:** Verify keystore exists at `android-client/bbtec-mdm.keystore` and signing config is correct.
 
-### Multiple Variants Conflict
-**Problem:** Can't install staging after production installed.
-**Solution:** This shouldn't happen if Application ID suffixes are configured correctly. Verify `applicationIdSuffix` is set for local/staging flavors.
+### Can't Install Local After Production (or vice versa)
+**Problem:** Installing local debug fails with "INSTALL_FAILED_ALREADY_EXISTS" after production installed.
+**Solution:** Local and production share the same package name (`com.bbtec.mdm.client`). Uninstall one before installing the other:
+```bash
+adb uninstall com.bbtec.mdm.client
+./gradlew installLocalDebug
+```
+
+### "Can't Set Up Device" During Provisioning
+**Problem:** Device shows "Can't set up device" immediately after scanning QR code.
+**Root Causes:**
+1. **Package name mismatch**: QR code says `com.bbtec.mdm.client`, APK has `com.bbtec.mdm.client.local`
+2. **Signature mismatch**: Database has wrong APK signature checksum
+
+**Solution:**
+- Verify package name matches: `unzip -p app/build/outputs/apk/local/debug/app-local-debug.apk AndroidManifest.xml | strings | grep package`
+- Extract actual signature: `/opt/android-sdk/build-tools/34.0.0/apksigner verify --print-certs app-local-debug.apk`
+- Update `src/lib/apk-signature-client.ts` with URL-safe Base64 signature (no padding, `+/` → `-_`)
+
+### APK Signature Format Wrong
+**Problem:** Provisioning fails with checksum error.
+**Solution:** Android provisioning requires **URL-safe Base64 without padding** (RFC 4648):
+- ❌ Wrong: `iFlIwQLMpbKE/1YZ5L+UHXMSmeKsHCwvJRsm7kgkblk=` (has `=`, `/`, `+`)
+- ✅ Correct: `iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk` (no `=`, uses `-` and `_`)
+
+### Dynamic IP Not Detected
+**Problem:** QR code shows wrong IP or no IP detected.
+**Solution:**
+- Check Next.js logs for `[NETWORK-DETECTION]` output
+- Verify `NEXT_PUBLIC_CONVEX_URL` contains "127.0.0.1" for local mode
+- Ensure your machine has a LAN interface (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+- Restart Next.js server if IP changed (DHCP reassignment)
+
+### APK Download Fails (404 or Network Error)
+**Problem:** Device can't download APK during provisioning.
+**Local Mode:**
+- Verify Next.js server is running and accessible on LAN
+- Check device is on same WiFi network as dev machine
+- Test connectivity: `curl http://<detected-ip>:3000/api/network-info` from another device
+
+**Cloud Mode:**
+- Verify APK uploaded to Convex storage
+- Check Convex dashboard for storage URL
 
 ## Version Management
 
@@ -356,15 +537,21 @@ Edit `android-client/app/build.gradle.kts`:
 
 ```kotlin
 defaultConfig {
-    versionCode = 39        // Increment for each release
-    versionName = "0.0.39"  // Semantic version
+    versionCode = 39        // Increment for each release (Play Store requires this)
+    versionName = "0.0.39"  // Semantic version (user-visible)
 }
 ```
 
-**Version Naming:**
-- Local: `0.0.39-local`
-- Staging: `0.0.39-staging`
-- Production: `0.0.39`
+**Version Naming Convention:**
+- Local: `0.0.39-local` (auto-appended by versionNameSuffix)
+- Staging: `0.0.39-staging` (auto-appended by versionNameSuffix)
+- Production: `0.0.39` (no suffix)
+
+**Best Practice:**
+- Always bump version after significant changes
+- `versionCode` must increment (Android requirement)
+- `versionName` follows semantic versioning: `MAJOR.MINOR.PATCH`
+- Current version: **0.0.39** (as of 2025-11-11)
 
 ## CI/CD Integration (Future)
 
@@ -401,10 +588,20 @@ jobs:
 ## Quick Reference Card
 
 ```bash
-# LOCAL DEVELOPMENT
+# OFFLINE LOCAL DEVELOPMENT (Recommended)
+# Terminal 1: Start Convex local backend
+npx convex dev --local
+
+# Terminal 2: Start Next.js (auto-detects LAN IP)
+NEXT_PRIVATE_TURBOPACK=0 npm run dev
+# → Watch for: [NETWORK-DETECTION] Detected LAN IP: 192.168.x.x
+
+# Terminal 3: Build APK
 cd android-client
-./gradlew installLocalDebug
-adb reverse tcp:3000 tcp:3000
+./gradlew clean assembleLocalDebug
+# → Upload APK in web dashboard
+# → Generate QR code (includes detected LAN IP)
+# → Scan with factory-reset device (all offline!)
 
 # STAGING TEST
 cd android-client
@@ -413,21 +610,27 @@ adb install -r app/build/outputs/apk/staging/release/app-staging-release.apk
 
 # PRODUCTION BUILD
 cd android-client
-./gradlew assembleProductionRelease
+./gradlew clean assembleProductionRelease
 # Upload: app/build/outputs/apk/production/release/app-production-release.apk
-
-# CLEAN BUILD
-cd android-client
-./gradlew clean
-./gradlew assembleProductionRelease
 
 # CHECK WHAT'S INSTALLED
 adb shell pm list packages | grep bbtec
+# Expected:
+# com.bbtec.mdm.client         (local OR production, not both)
+# com.bbtec.mdm.client.staging (if installed)
 
 # UNINSTALL VARIANTS
-adb uninstall com.bbtec.mdm.client.local
-adb uninstall com.bbtec.mdm.client.staging
-adb uninstall com.bbtec.mdm.client
+adb uninstall com.bbtec.mdm.client          # Removes local OR production
+adb uninstall com.bbtec.mdm.client.staging  # Removes staging
+
+# VERIFY APK SIGNING (v1+v2)
+/opt/android-sdk/build-tools/34.0.0/apksigner verify --verbose \
+  app/build/outputs/apk/local/debug/app-local-debug.apk
+
+# EXTRACT APK SIGNATURE (for database)
+/opt/android-sdk/build-tools/34.0.0/apksigner verify --print-certs \
+  app-local-debug.apk | grep SHA-256 | head -1 | awk '{print $2}'
+# Convert to URL-safe Base64 (remove =, +/→-_)
 ```
 
 ## Related Documentation
@@ -438,6 +641,13 @@ adb uninstall com.bbtec.mdm.client
 
 ---
 
-**Last Updated:** 2025-11-10
-**Version:** 1.0
-**Author:** Generated during multi-environment setup
+**Last Updated:** 2025-11-11
+**Version:** 2.0 (Offline-First Local Development Update)
+**Android Client Version:** 0.0.39
+**Changes:**
+- Dynamic IP detection for local development
+- Environment-aware APK streaming (local streams, cloud redirects)
+- Cleartext HTTP support for local flavor
+- v1+v2 signing for both debug and release builds
+- Removed `.local` package suffix (local and production share base package name)
+- Comprehensive troubleshooting for provisioning issues
