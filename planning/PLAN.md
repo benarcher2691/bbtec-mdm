@@ -370,7 +370,11 @@ npx convex dev --local
 # Terminal 2: Next.js dev server
 NEXT_PRIVATE_TURBOPACK=0 npm run dev
 
-# Terminal 3: Build Android APK
+# Terminal 3: ADB port forwarding (REQUIRED for physical device testing)
+adb reverse tcp:3000 tcp:3000
+# Must be re-run if device is disconnected/reconnected
+
+# Build Android APK
 cd android-client
 ./gradlew clean assembleLocalDebug
 ```

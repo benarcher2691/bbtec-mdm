@@ -116,25 +116,39 @@ cd android-client
 
 ### Local Development (Physical Device Testing)
 
+**Two Testing Approaches:**
+
+#### Option A: QR Code Enrollment (WiFi - Recommended)
+No USB cable or adb reverse needed! Uses auto-detected LAN IP.
+
+See "Testing Workflow (Offline-First)" section below.
+
+#### Option B: Direct Install via USB (For Iterative Development)
+When you want to quickly test code changes without going through enrollment:
+
 **Prerequisites:**
 1. Connect Android device via USB
 2. Enable USB debugging on device
-3. Run `adb reverse tcp:3000 tcp:3000` to forward localhost
+3. **REQUIRED:** Run `adb reverse tcp:3000 tcp:3000` to forward localhost
 
 ```bash
 cd android-client
 
-# Build local debug APK
-./gradlew assembleLocalDebug
-
-# Or build + install in one command
+# Build and install in one command
 ./gradlew installLocalDebug
+
+# Set up port forwarding (REQUIRED after any device disconnect/reconnect)
+adb reverse tcp:3000 tcp:3000
 
 # Verify installation
 adb shell pm list packages | grep bbtec
-
 # Expected output: com.bbtec.mdm.client (same as production - no .local suffix)
 ```
+
+**Important:** Port forwarding must be re-run if you:
+- Disconnect/reconnect USB cable
+- Restart device
+- Restart adb server
 
 **APK Location:** `app/build/outputs/apk/local/debug/app-local-debug.apk`
 

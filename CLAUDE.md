@@ -86,6 +86,16 @@ NEXT_PRIVATE_TURBOPACK=0 npm run dev
 # IMPORTANT: Disable Turbopack (Next.js 15 + React 19 RC compatibility)
 ```
 
+**Terminal 3 - ADB Port Forwarding (if testing on physical device):**
+```bash
+# Connect physical device via USB, then run:
+adb reverse tcp:3000 tcp:3000
+
+# This forwards localhost:3000 on the device to localhost:3000 on your machine
+# REQUIRED for localDebug APK to connect to your dev server
+# Must be re-run if you disconnect/reconnect the device
+```
+
 **Note:** If you get webpack chunk loading errors, clean build cache:
 ```bash
 rm -rf .next && rm -rf node_modules/.cache
