@@ -11,8 +11,8 @@ android {
         applicationId = "com.bbtec.mdm.client"
         minSdk = 29
         targetSdk = 34
-        versionCode = 39
-        versionName = "0.0.39"
+        versionCode = 41
+        versionName = "0.0.41"
     }
 
     // Product Flavors for different environments
