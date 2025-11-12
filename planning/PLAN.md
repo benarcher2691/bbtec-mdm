@@ -2,14 +2,14 @@
 
 **Branch:** `feature/offline-local-dev`
 **Web Version:** 0.0.4
-**Android Version:** 0.0.39
-**Last Updated:** 2025-11-11
+**Android Version:** 0.0.41
+**Last Updated:** 2025-11-12
 
 ---
 
 ## Next Steps - Promotion Path
 
-### ✅ Critical Issues (RESOLVED - Ready for PR)
+### ✅ Critical Issues (ALL RESOLVED - PRs Created)
 
 #### Issue #1: Preview URL Detection Bug ✅
 **File:** `src/lib/network-detection.ts:45-52`
@@ -56,6 +56,111 @@ const cloudUrl =
 - Client-side now returns placeholders after validation
 - Server-side extracts actual package name from APK manifest
 - Upload flow updated to use server-extracted metadata
+
+---
+
+#### Issue #4: Preview QR Code Density ✅
+**File:** `src/app/actions/enrollment.ts`
+
+**Status:** FIXED (2025-11-12)
+
+**Problem:** Long preview URLs (56-65 chars) caused QR codes too dense to scan
+
+**Solution Implemented:**
+- Reduced error correction level from 'M' to 'L'
+- Reduced margin from 4 to 2 pixels
+- Result: QR codes scannable with preview URLs
+
+---
+
+#### Issue #5: Vercel Authentication Blocking APK Downloads ✅
+**Status:** FIXED (2025-11-12)
+
+**Problem:** HTTP 401 when Android devices tried to download APK from preview deployments
+
+**Solution Implemented:**
+- Disabled "Vercel Authentication" in project settings (Deployment Protection)
+- Result: APK downloads now return HTTP 307 (redirect) instead of HTTP 401
+
+**Alternative:** Could use `VERCEL_AUTOMATION_BYPASS_SECRET` but disabled auth for simplicity
+
+---
+
+#### Issue #6: Environment-Aware QR Code Generation ✅
+**File:** `src/app/actions/enrollment.ts`
+**Commit:** b1077c0
+
+**Status:** FIXED (2025-11-12)
+
+**Problem:** QR code hardcoded production package name for all environments
+
+**Solution Implemented:**
+```typescript
+const isPreview = process.env.VERCEL_ENV === 'preview'
+const isLocal = process.env.NEXT_PUBLIC_CONVEX_URL?.includes('127.0.0.1')
+
+if (isPreview) {
+  packageName = 'com.bbtec.mdm.client.staging'  // Preview uses staging APK
+} else {
+  packageName = 'com.bbtec.mdm.client'  // Local/Production
+}
+```
+
+**Benefit:** Enforces correct APK variant per environment, fails fast on mistakes
+
+---
+
+#### Issue #7: Component Name Construction Bug ✅
+**File:** `src/app/actions/enrollment.ts`
+**Commit:** 777cc07
+
+**Status:** FIXED (2025-11-12)
+
+**Problem:** Component name included `.staging` in class path (incorrect!)
+
+**Root Cause:** Class path stays `com.bbtec.mdm.client.MdmDeviceAdminReceiver` across all variants, only application package changes
+
+**Solution Implemented:**
+```typescript
+// Before (wrong):
+const componentName = `${packageName}/${packageName}.MdmDeviceAdminReceiver`
+
+// After (correct):
+const componentName = `${packageName}/com.bbtec.mdm.client.MdmDeviceAdminReceiver`
+```
+
+**Result:** Android accepts APK and enrolls successfully
+
+---
+
+#### Issue #8: Staging Sync Failures (404/405) ✅
+**File:** `android-client/app/src/main/java/com/bbtec/mdm/client/ApiClient.kt`
+**Commit:** eacb4b2
+**Version:** Bumped to 0.0.41
+
+**Status:** FIXED (2025-11-12)
+
+**Problem:** Android client used outdated BuildConfig URL for staging:
+- BuildConfig: `https://bbtec-mdm-git-development.vercel.app/api/client`
+- Actual deployment: `https://bbtec-mdm-git-development-ben-archers-projects.vercel.app`
+- Result: 404 errors → "Sync failed"
+
+**Solution Implemented:**
+```kotlin
+private val baseUrl: String
+    get() {
+        val enrollmentUrl = prefsManager.getServerUrl()
+        return if (enrollmentUrl != "https://bbtec-mdm.vercel.app") {
+            // Use enrollment URL from QR code + API path
+            "$enrollmentUrl/api/client"
+        } else {
+            // Fallback to BuildConfig
+            BuildConfig.BASE_URL
+        }
+    }
+```
+
+**Result:** Staging sync now works (uses actual deployment URL from enrollment)
 
 ---
 
@@ -138,15 +243,18 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 
 **Quick Summary:**
 
-#### Phase 1: Deploy to Staging (After Fixes)
-1. Fix critical issues above
-2. Create PR: `feature/offline-local-dev` → `development`
-3. Vercel auto-creates preview deployment
-4. Configure preview environment variables (Convex cloud dev)
-5. Deploy Convex schema to cloud dev
-6. Seed cloud dev database
-7. Test enrollment in preview
-8. Merge to development
+#### Phase 1: Deploy to Staging ✅ MOSTLY COMPLETE
+1. ✅ Fix critical issues (all 8 issues resolved)
+2. ✅ Create PRs: `feature/offline-local-dev` → `development`
+   - PR #3: ✅ MERGED - Environment-aware QR + QR optimization
+   - PR #4: ✅ MERGED - Component name fix
+   - PR #5: 🔄 OPEN - Android client staging sync fix (https://github.com/benarcher2691/bbtec-mdm/pull/5)
+3. ✅ Vercel auto-creates preview deployment
+4. ✅ Configure preview environment variables (Convex cloud dev)
+5. ⚠️ Deploy Convex schema to cloud dev (if needed)
+6. ⚠️ Seed cloud dev database (if needed)
+7. ✅ Test enrollment in preview (working!)
+8. ⚠️ Merge PR #5 to development (pending review)
 
 #### Phase 2: Deploy to Production (After Staging Validation)
 1. Build production APK
@@ -293,10 +401,11 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 **Android Client:**
 - Kotlin, Android 10+ (API 29+)
 - Device Owner mode (full device control)
-- Current version: v0.0.39 (offline-first + resilience system)
-- Features: Offline enrollment, device commands, ping interval config, app installation
+- Current version: v0.0.41 (environment-aware sync)
+- Features: Offline enrollment, device commands, ping interval config, app installation, dynamic server URL
 - Security: Three separate IDs (enrollmentId, ssaId, serialNumber), URL-safe Base64 signatures
 - Reliability: Multi-layered heartbeat (foreground service + watchdog + WorkManager + system integration)
+- Environment Support: Uses enrollment server URL for staging/preview, BuildConfig for local/production
 
 **Environments:**
 - **Local**: Offline development (Convex at 127.0.0.1:3210, auto-detects LAN IP)
@@ -307,6 +416,13 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 
 ## Current Devices
 
+**Test Device: Lenovo TB-X606F**
+- Serial: HPV4CZ99
+- Android: 10 (API 29)
+- App Version: v0.0.41 (staging)
+- Environment: Staging/Preview
+- Status: ✅ Enrolled as Device Owner, sync working
+
 **Device 1: Hannspree HSG1416**
 - Serial: 1286Z2HN00621
 - Android: 10 (API 29)
@@ -316,7 +432,7 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 **Device 2: Hannspree HSG1416**
 - Serial: 313VC2HN00110
 - Android: 10 (API 29)
-- App Version: Requires enrollment with v0.0.39
+- App Version: Requires enrollment with v0.0.41
 - Status: ⚠️ Needs re-enrollment
 
 ---
