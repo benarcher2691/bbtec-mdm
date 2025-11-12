@@ -86,13 +86,42 @@ export async function createEnrollmentQRCode(
         }
       }
 
+      // Environment-aware package configuration
+      // This enforces using the correct APK variant for each environment
+      const isPreview = process.env.VERCEL_ENV === 'preview'
+      const isLocal = process.env.NEXT_PUBLIC_CONVEX_URL?.includes('127.0.0.1')
+
+      let packageName: string
+      let environmentName: string
+
+      if (isPreview) {
+        // Preview/staging deployments use staging APK
+        packageName = 'com.bbtec.mdm.client.staging'
+        environmentName = 'PREVIEW/STAGING'
+      } else if (isLocal) {
+        // Local development uses production package (for provisioning testing)
+        packageName = 'com.bbtec.mdm.client'
+        environmentName = 'LOCAL'
+      } else {
+        // Production uses production package
+        packageName = 'com.bbtec.mdm.client'
+        environmentName = 'PRODUCTION'
+      }
+
+      const componentName = `${packageName}/${packageName}.MdmDeviceAdminReceiver`
+
       dpcConfig = {
-        componentName: 'com.bbtec.mdm.client/com.bbtec.mdm.client.MdmDeviceAdminReceiver',
-        packageName: 'com.bbtec.mdm.client',
+        componentName,
+        packageName,
         apkUrl: `${serverUrl}/api/apps/${currentApk.storageId}`,
         signatureChecksum: currentApk.signatureChecksum,
         version: currentApk.version,
       }
+
+      console.log('[QR GEN] Environment:', environmentName)
+      console.log('[QR GEN] VERCEL_ENV:', process.env.VERCEL_ENV)
+      console.log('[QR GEN] Package name:', packageName)
+      console.log('[QR GEN] Component name:', componentName)
       console.log('[QR GEN] APK URL (redirect):', dpcConfig.apkUrl)
       console.log('[QR GEN] Storage ID:', currentApk.storageId)
     }
