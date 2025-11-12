@@ -64,10 +64,59 @@ export async function GET(
       console.error(`[APK DOWNLOAD] ${storageId} - Failed to increment download count:`, err)
     })
 
-    console.log(`[APK DOWNLOAD] ${storageId} - SUCCESS: Redirecting to Convex storage`)
+    console.log(`[APK DOWNLOAD] ${storageId} - SUCCESS: Preparing download`)
 
-    // Redirect to the Convex storage URL
-    return NextResponse.redirect(downloadUrl)
+    // Environment-aware download strategy:
+    // - Local Convex (127.0.0.1): Stream bytes through Next.js (offline-friendly)
+    // - Cloud Convex: Redirect to cloud storage (efficient, no bandwidth through our server)
+    const isLocalConvex = downloadUrl.includes('127.0.0.1:3210')
+
+    if (isLocalConvex) {
+      // LOCAL DEVELOPMENT: Stream APK bytes through Next.js
+      // This allows offline development - device hits LAN IP, Next.js fetches from localhost Convex
+      console.log(`[APK DOWNLOAD] ${storageId} - Local Convex detected, streaming bytes...`)
+
+      try {
+        // Fetch from local Convex (accessible from Next.js server)
+        const response = await fetch(downloadUrl)
+
+        if (!response.ok) {
+          console.error(`[APK DOWNLOAD] ${storageId} - Failed to fetch from Convex:`, response.status)
+          return NextResponse.json(
+            { error: 'Failed to fetch APK from storage' },
+            { status: 500 }
+          )
+        }
+
+        // Get the file as a stream
+        const blob = await response.blob()
+
+        console.log(`[APK DOWNLOAD] ${storageId} - Streaming ${blob.size} bytes to device`)
+
+        // Return the APK with proper headers for Android DownloadManager
+        return new NextResponse(blob, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/vnd.android.package-archive',
+            'Content-Disposition': 'attachment; filename="mdm.apk"',
+            'Content-Length': blob.size.toString(),
+            // Allow caching for faster repeated downloads during testing
+            'Cache-Control': 'public, max-age=3600',
+          },
+        })
+      } catch (error) {
+        console.error(`[APK DOWNLOAD] ${storageId} - Error streaming file:`, error)
+        return NextResponse.json(
+          { error: 'Failed to stream APK file', details: error instanceof Error ? error.message : 'Unknown error' },
+          { status: 500 }
+        )
+      }
+    } else {
+      // CLOUD DEVELOPMENT/PRODUCTION: Redirect to Convex cloud storage
+      // This is efficient - device downloads directly from Convex CDN
+      console.log(`[APK DOWNLOAD] ${storageId} - Cloud Convex detected, redirecting to CDN`)
+      return NextResponse.redirect(downloadUrl)
+    }
   } catch (error) {
     console.error(`[APK DOWNLOAD] ERROR at ${requestTimestamp}:`, error)
     return NextResponse.json(

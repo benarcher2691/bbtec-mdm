@@ -5,6 +5,7 @@ import QRCode from 'qrcode'
 import { ConvexHttpClient } from 'convex/browser'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
+import { detectServerUrl } from '@/lib/network-detection'
 
 async function getAuthenticatedConvexClient() {
   const { getToken } = await auth()
@@ -40,7 +41,18 @@ export async function createEnrollmentQRCode(
 
   try {
     const convex = await getAuthenticatedConvexClient()
-    const serverUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bbtec-mdm.vercel.app"
+
+    // Dynamic server URL detection (environment-aware)
+    const networkDetection = detectServerUrl('[QR-GEN]')
+    const serverUrl = networkDetection.serverUrl
+
+    console.log('[QR-GEN] Network detection result:', {
+      serverUrl: networkDetection.serverUrl,
+      environment: networkDetection.environment,
+      isLocal: networkDetection.isLocal,
+      detectedIp: networkDetection.detectedIp,
+      detectionMethod: networkDetection.detectionMethod
+    })
 
     // DPC configuration based on type
     let dpcConfig: {
@@ -165,6 +177,12 @@ export async function createEnrollmentQRCode(
         storageId: dpcConfig.apkUrl.split('/').pop() || '',
         convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
         dpcType,
+        networkDetection: {
+          environment: networkDetection.environment,
+          isLocal: networkDetection.isLocal,
+          detectedIp: networkDetection.detectedIp,
+          detectionMethod: networkDetection.detectionMethod,
+        },
       },
     }
   } catch (error) {

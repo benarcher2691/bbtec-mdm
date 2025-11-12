@@ -11,16 +11,49 @@ android {
         applicationId = "com.bbtec.mdm.client"
         minSdk = 29
         targetSdk = 34
-        versionCode = 38
-        versionName = "0.0.38"
+        versionCode = 39
+        versionName = "0.0.39"
+    }
+
+    // Product Flavors for different environments
+    flavorDimensions += "environment"
+    productFlavors {
+        create("local") {
+            dimension = "environment"
+            // Note: No applicationIdSuffix for local - keeps base package name for easier development
+            // This means you can't install local + staging/production at the same time
+            versionNameSuffix = "-local"
+            // localhost works with physical device via adb reverse tcp:3000 tcp:3000
+            buildConfigField("String", "BASE_URL", "\"http://localhost:3000/api/client\"")
+        }
+        create("staging") {
+            dimension = "environment"
+            applicationIdSuffix = ".staging"
+            versionNameSuffix = "-staging"
+            // Points to Vercel preview deployment (development branch)
+            buildConfigField("String", "BASE_URL", "\"https://bbtec-mdm-git-development.vercel.app/api/client\"")
+        }
+        create("production") {
+            dimension = "environment"
+            // Production keeps the original applicationId (no suffix)
+            buildConfigField("String", "BASE_URL", "\"https://bbtec-mdm.vercel.app/api/client\"")
+        }
     }
 
     signingConfigs {
+        getByName("debug") {
+            // Enable both v1 (JAR) and v2 signing for compatibility
+            // v1 is needed for parsing code that looks for META-INF/ certificates
+            enableV1Signing = true
+            enableV2Signing = true
+        }
         create("release") {
             storeFile = file("../bbtec-mdm.keystore")
             storePassword = "android"
             keyAlias = "bbtec-mdm"
             keyPassword = "android"
+            enableV1Signing = true
+            enableV2Signing = true
         }
     }
 
@@ -39,6 +72,10 @@ android {
 
     kotlinOptions {
         jvmTarget = "1.8"
+    }
+
+    buildFeatures {
+        buildConfig = true  // Enable BuildConfig generation for flavor-specific constants
     }
 }
 

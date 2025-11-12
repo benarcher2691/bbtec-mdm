@@ -14,9 +14,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { createEnrollmentQRCode } from "@/app/actions/enrollment"
-import { QrCode, Copy, Check, AlertCircle, ArrowRight, Loader2 } from "lucide-react"
+import { QrCode, Copy, Check, AlertCircle, ArrowRight, Loader2, Network } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { Id } from "../../convex/_generated/dataModel"
+import { useServerUrl } from "@/hooks/useServerUrl"
 
 interface EnrollmentToken {
   token: string
@@ -35,6 +36,9 @@ export function QRCodeGenerator() {
   const [selectedPolicyId, setSelectedPolicyId] = useState<Id<"policies"> | null>(null)
   const [selectedCompanyUserId, setSelectedCompanyUserId] = useState<Id<"companyUsers"> | null>(null)
   const dpcType = 'bbtec' // Always use BBTec MDM Client
+
+  // Dynamic server URL detection
+  const { serverUrl, networkInfo, loading: networkLoading, isLocal, detectedIp } = useServerUrl()
 
   // Query default policy and company users from Convex
   const defaultPolicy = useQuery(api.policies.getDefaultPolicy)
@@ -152,6 +156,54 @@ export function QRCodeGenerator() {
           </p>
         )}
       </div>
+
+      {/* Network Info Display */}
+      {networkInfo && (
+        <div className="rounded-lg border bg-slate-50 p-4">
+          <div className="flex items-start gap-3">
+            <Network className="h-5 w-5 text-slate-600 mt-0.5" />
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-slate-900">
+                  {isLocal ? 'Local Development' : 'Cloud Environment'}
+                </h4>
+                <span className={`text-xs px-2 py-1 rounded-full ${isLocal ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                  {networkInfo.environment}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Server URL:</span>{' '}
+                  <code className="text-xs bg-slate-200 px-2 py-1 rounded">{serverUrl}</code>
+                </p>
+                {isLocal && detectedIp && (
+                  <p className="text-xs text-slate-600">
+                    <span className="font-medium">Detected LAN IP:</span> {detectedIp}
+                    {networkInfo.interfaceName && <span className="text-slate-500"> ({networkInfo.interfaceName})</span>}
+                  </p>
+                )}
+                <p className="text-xs text-slate-500">
+                  Detection: {networkInfo.detectionMethod}
+                </p>
+              </div>
+              {isLocal && (
+                <p className="text-xs text-blue-700 bg-blue-50 p-2 rounded border border-blue-200 mt-2">
+                  💡 Devices will connect to your local network at this IP address
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {networkLoading && (
+        <div className="rounded-lg border bg-slate-50 p-4">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-5 w-5 text-slate-600 animate-spin" />
+            <p className="text-sm text-slate-700">Detecting network configuration...</p>
+          </div>
+        </div>
+      )}
 
       {/* Generate Button */}
       <div className="flex gap-4 items-center">
