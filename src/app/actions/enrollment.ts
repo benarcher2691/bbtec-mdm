@@ -156,8 +156,8 @@ export async function createEnrollmentQRCode(
     }
     const qrCodeDataUrl = await QRCode.toDataURL(qrContent, {
       width: 512,
-      margin: 4,
-      errorCorrectionLevel: 'M',  // Medium error correction (H was too complex)
+      margin: 2,  // Reduced margin for denser content
+      errorCorrectionLevel: 'L',  // Low error correction for longer URLs (preview deployments)
       color: {
         dark: '#000000',
         light: '#FFFFFF'
