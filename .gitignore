@@ -11,6 +11,8 @@ yarn-error.log*
 .env.development
 .env.production
 .env.local.backup
+.env.prod
+.env.vercel.*
 
 # Credentials
 credentials.json
