@@ -108,7 +108,9 @@ export async function createEnrollmentQRCode(
         environmentName = 'PRODUCTION'
       }
 
-      const componentName = `${packageName}/${packageName}.MdmDeviceAdminReceiver`
+      // Component name: package changes, but class path stays com.bbtec.mdm.client.MdmDeviceAdminReceiver
+      // Example: com.bbtec.mdm.client.staging/com.bbtec.mdm.client.MdmDeviceAdminReceiver
+      const componentName = `${packageName}/com.bbtec.mdm.client.MdmDeviceAdminReceiver`
 
       dpcConfig = {
         componentName,
