@@ -31,8 +31,23 @@ class ApiClient(private val context: Context) {
     private val stateManager = HeartbeatStateManager(context)
     private val ioScope = CoroutineScope(Dispatchers.IO)
 
-    // Server URL from build configuration (varies by flavor: debug, staging, production)
-    private val baseUrl = BuildConfig.BASE_URL
+    // Server URL: Use enrollment extras URL (from QR code), fallback to build config
+    // This ensures correct URL for all environments:
+    // - Local/Production: BuildConfig is correct OR enrollment extras provide correct URL
+    // - Staging: Enrollment extras provide correct URL (BuildConfig may be outdated)
+    private val baseUrl: String
+        get() {
+            val enrollmentUrl = prefsManager.getServerUrl()
+            // If enrollment URL is the default fallback, use BuildConfig instead
+            return if (enrollmentUrl != "https://bbtec-mdm.vercel.app") {
+                // Enrollment URL is base server URL (e.g., https://bbtec-mdm-git-development-ben-archers-projects.vercel.app)
+                // Need to append /api/client for API endpoints
+                "$enrollmentUrl/api/client"
+            } else {
+                // BuildConfig already includes /api/client
+                BuildConfig.BASE_URL
+            }
+        }
 
     /**
      * Sends heartbeat to server with resilient error handling and backoff.
