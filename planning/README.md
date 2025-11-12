@@ -19,7 +19,7 @@ This directory contains active planning documents and development session notes 
 ## 🎯 Quick Navigation
 
 **For current development:**
-- Check **`PLAN-2025-11-11.md`** for current priorities and next steps
+- Check **`PLAN.md`** for current priorities and next steps
 - Review **`ROADMAP-NEXT-STEPS.md`** for long-term feature planning
 
 **For operations:**

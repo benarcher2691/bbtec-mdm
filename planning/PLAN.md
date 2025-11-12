@@ -2,7 +2,7 @@
 
 **Branch:** `feature/offline-local-dev`
 **Web Version:** 0.0.4
-**Android Version:** 0.0.41
+**Android Version:** 0.0.42
 **Last Updated:** 2025-11-12
 
 ---
@@ -272,19 +272,57 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 ## Future Work - Core Functionality
 
 ### Priority 1: Security Audit 🔒
-**Status:** IN PROGRESS (command ownership ✅, enrollment/policy endpoints pending)
+**Status:** AUDIT COMPLETE (2025-11-12) - 1 CRITICAL FIX REQUIRED
+
+**Full Report:** [planning/SECURITY-AUDIT-2025-11-12.md](./SECURITY-AUDIT-2025-11-12.md)
+
+**Audit Results:**
+- [x] ✅ Review all Convex functions for proper `ctx.auth.getUserIdentity()` checks (50+ functions - ALL PROTECTED)
+- [x] ✅ Audit `/api/dpc/register` endpoint (token validation - PROTECTED)
+- [x] ✅ Audit `/api/client/commands` endpoint (device auth - PROTECTED)
+- [x] ✅ Audit all API routes for authentication (16 routes scanned)
+- [ ] 🚨 **CRITICAL:** `/api/debug/env` endpoint exposes environment variables publicly (NO AUTH)
+- [ ] 🟡 Add rate limiting on registration endpoints (design review needed)
+- [ ] 🟡 Review APK download security (public access vs. device auth)
+- [ ] Add audit logging for admin actions (who did what when)
+
+**Immediate Actions Required:**
+1. **Fix `/api/debug/env` endpoint:** Add Clerk authentication or delete entirely
+2. **Design Review:** Public endpoints intentional? (registration, APK downloads)
+3. **Rate Limiting:** Add to registration endpoints to prevent spam/abuse
+
+**Overall Security Posture:** ✅ Good (with critical fix needed)
+- Consistent auth patterns across backend
+- All Convex functions properly protected
+- Device token authentication working correctly
+
+**Expected Time:** 1 day (critical fix + design review)
+
+---
+
+### Priority 1.5: QR Code Generation Review 📱
+**Status:** NOT STARTED
 
 **What's Needed:**
-- [ ] Audit `/api/dpc/register` endpoint (enrollment token validation)
-- [ ] Audit `/api/client/commands` endpoint (device auth)
-- [ ] Review all Convex functions for proper `ctx.auth.getUserIdentity()` checks
-- [ ] Add rate limiting on registration endpoints
-- [ ] Add audit logging for admin actions (who did what when)
-- [ ] Test for data leakage across user boundaries
+- [ ] Verify QR code correctness across all environments (local, staging, production)
+- [ ] Test QR code scanning on different devices/scanners
+- [ ] Validate environment detection logic (VERCEL_ENV, NEXT_PUBLIC_CONVEX_URL)
+- [ ] Ensure proper package name mapping per environment:
+  - Local: `com.bbtec.mdm.client` (production package, debug build)
+  - Staging/Preview: `com.bbtec.mdm.client.staging` (staging package, release build)
+  - Production: `com.bbtec.mdm.client` (production package, release build)
+- [ ] Test component name construction (verify no `.staging` in class path)
+- [ ] Verify error correction levels and margins are appropriate
+- [ ] Test enrollment flow end-to-end in each environment
 
-**Why Important:** Critical for production readiness and user data security
+**Why Important:** QR code is the entry point for device enrollment - must be 100% correct in all environments to avoid enrollment failures.
 
-**Expected Time:** 2-3 days
+**Files to Review:**
+- `src/app/actions/enrollment.ts` - QR code generation logic
+- `src/components/qr-code-generator.tsx` - Client-side QR rendering
+- `src/lib/network-detection.ts` - Environment detection
+
+**Expected Time:** 2-3 hours (testing across environments)
 
 ---
 
