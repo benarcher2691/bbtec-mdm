@@ -562,7 +562,34 @@ Android provisioning requires the APK package name to match exactly what's in th
 
 All builds (debug and release) use **v1 + v2 signing** for maximum compatibility:
 
+### Secure Keystore Management
+
+**IMPORTANT:** Keystore credentials are now stored securely outside of version control.
+
+**Setup (one-time per developer):**
+```bash
+cd android-client
+cp keystore.properties.example keystore.properties
+# Edit keystore.properties with actual passwords (ask team lead)
+```
+
+**File structure:**
+```
+android-client/
+├── keystore.properties          # Local file with credentials (gitignored!)
+├── keystore.properties.example  # Template for new developers (in git)
+└── bbtec-mdm.keystore          # The actual keystore file
+```
+
+**Configuration (build.gradle.kts):**
 ```kotlin
+// Loads credentials from keystore.properties (local file, not in git)
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(keystorePropertiesFile.inputStream())
+}
+
 signingConfigs {
     getByName("debug") {
         // Debug builds: v1+v2 signing for certificate extraction
@@ -570,15 +597,25 @@ signingConfigs {
         enableV2Signing = true  // Modern APK signing
     }
     create("release") {
-        storeFile = file("../bbtec-mdm.keystore")
-        storePassword = "android"
-        keyAlias = "bbtec-mdm"
-        keyPassword = "android"
+        // Load credentials from keystore.properties (not hardcoded!)
+        storeFile = file(keystoreProperties.getProperty("storeFile") ?: "../bbtec-mdm.keystore")
+        storePassword = keystoreProperties.getProperty("storePassword")
+            ?: System.getenv("KEYSTORE_PASSWORD")
+        keyAlias = keystoreProperties.getProperty("keyAlias")
+            ?: System.getenv("KEY_ALIAS")
+        keyPassword = keystoreProperties.getProperty("keyPassword")
+            ?: System.getenv("KEY_PASSWORD")
         enableV1Signing = true
         enableV2Signing = true
     }
 }
 ```
+
+**Security benefits:**
+- ✅ Credentials never committed to git
+- ✅ Each developer uses their own local file
+- ✅ CI/CD can use environment variables as fallback
+- ✅ No risk of accidental password exposure
 
 **Why v1 + v2 Signing?**
 - **v1 (JAR signing)**: Creates `META-INF/CERT.RSA` file needed for certificate extraction in web dashboard
@@ -616,6 +653,17 @@ unzip -l app/build/outputs/apk/local/debug/app-local-debug.apk | grep META-INF
 ### APK Not Signed
 **Problem:** Release APK not signed with keystore.
 **Solution:** Verify keystore exists at `android-client/bbtec-mdm.keystore` and signing config is correct.
+
+### "Missing keystore password" Error
+**Problem:** Build fails with error: "Missing keystore password - create keystore.properties or set KEYSTORE_PASSWORD env var"
+**Cause:** The `keystore.properties` file is missing (it's gitignored for security).
+**Solution:**
+```bash
+cd android-client
+cp keystore.properties.example keystore.properties
+# Edit keystore.properties with actual credentials (ask team lead)
+# Default password is "android" for development keystore
+```
 
 ### Can't Install Local After Production (or vice versa)
 **Problem:** Installing local debug fails with "INSTALL_FAILED_ALREADY_EXISTS" after production installed.
@@ -683,7 +731,238 @@ defaultConfig {
 - Always bump version after significant changes
 - `versionCode` must increment (Android requirement)
 - `versionName` follows semantic versioning: `MAJOR.MINOR.PATCH`
-- Current version: **0.0.39** (as of 2025-11-11)
+- Tag releases with git: `git tag android-v0.0.41 -m "Android client v0.0.41"`
+- Current version: **0.0.41** (as of 2025-11-12)
+
+## Build Provenance & Traceability
+
+**Critical for production debugging:** Every APK now includes git metadata so you can trace any build back to its exact source code.
+
+### What's Injected Into Every APK
+
+The build system automatically injects the following into `BuildConfig`:
+
+```kotlin
+// Automatically generated in every build
+public static final String GIT_COMMIT_SHA = "7ba03a0";     // Git commit (short SHA)
+public static final String GIT_BRANCH = "feature/my-feature";  // Git branch name
+public static final String BUILD_TIMESTAMP = "2025-11-12T21:32:38Z";  // ISO 8601 timestamp
+```
+
+### How It Works
+
+In `android-client/app/build.gradle.kts`:
+
+```kotlin
+// Git metadata functions (automatically executed during build)
+fun getGitCommitSha(): String {
+    val stdout = ByteArrayOutputStream()
+    exec {
+        commandLine("git", "rev-parse", "--short", "HEAD")
+        standardOutput = stdout
+    }
+    return stdout.toString().trim()
+}
+
+fun getGitBranch(): String {
+    val stdout = ByteArrayOutputStream()
+    exec {
+        commandLine("git", "rev-parse", "--abbrev-ref", "HEAD")
+        standardOutput = stdout
+    }
+    return stdout.toString().trim()
+}
+
+fun getBuildTimestamp(): String {
+    return Instant.now().toString()
+}
+
+// Inject into BuildConfig
+android {
+    defaultConfig {
+        // ... version info
+        buildConfigField("String", "GIT_COMMIT_SHA", "\"${getGitCommitSha()}\"")
+        buildConfigField("String", "GIT_BRANCH", "\"${getGitBranch()}\"")
+        buildConfigField("String", "BUILD_TIMESTAMP", "\"${getBuildTimestamp()}\"")
+    }
+}
+```
+
+### Using Build Info in Your Android App
+
+**Create a BuildInfo helper (recommended):**
+
+```kotlin
+// File: app/src/main/java/com/bbtec/mdm/client/BuildInfo.kt
+package com.bbtec.mdm.client
+
+object BuildInfo {
+    val version: String = BuildConfig.VERSION_NAME
+    val versionCode: Int = BuildConfig.VERSION_CODE
+    val gitCommit: String = BuildConfig.GIT_COMMIT_SHA
+    val gitBranch: String = BuildConfig.GIT_BRANCH
+    val buildTime: String = BuildConfig.BUILD_TIMESTAMP
+
+    fun getFullInfo(): String {
+        return """
+            BBTec MDM Client
+            Version: $version ($versionCode)
+            Commit: $gitCommit
+            Branch: $gitBranch
+            Built: $buildTime
+        """.trimIndent()
+    }
+}
+```
+
+**Use in your app:**
+
+```kotlin
+// In MainActivity or any Activity:
+import android.util.Log
+import com.bbtec.mdm.client.BuildInfo
+
+// Log on app startup
+Log.i("AppInfo", BuildInfo.getFullInfo())
+
+// Display in an "About" screen
+aboutTextView.text = BuildInfo.getFullInfo()
+
+// Send with bug reports
+val bugReport = """
+    User reported issue: ...
+    ${BuildInfo.getFullInfo()}
+""".trimIndent()
+```
+
+### Reproducible Builds
+
+**Scenario:** User reports a bug in production APK v0.0.41
+
+**Before build provenance:**
+```
+You: "Which code was that built from?" 🤷
+Team: *checks git history, guesses based on dates*
+```
+
+**After build provenance:**
+```
+1. Check app logs or About screen: "Commit: 7ba03a0"
+2. Checkout that exact commit:
+   git checkout 7ba03a0
+3. Rebuild:
+   cd android-client
+   ./gradlew assembleProductionRelease
+4. → Produces identical APK (minus timestamp)
+5. Debug the exact code that's running in production ✅
+```
+
+### Git Tagging Workflow (Recommended)
+
+**When releasing a new version:**
+
+```bash
+# 1. Bump version in build.gradle.kts
+vim android-client/app/build.gradle.kts
+# Set: versionCode = 42, versionName = "0.0.42"
+
+# 2. Commit version bump
+git add android-client/app/build.gradle.kts
+git commit -m "chore: Bump Android client to v0.0.42"
+
+# 3. Tag the release
+git tag -a android-v0.0.42 -m "Android client v0.0.42
+
+- Feature X added
+- Bug Y fixed
+"
+
+# 4. Build release APK
+cd android-client
+./gradlew clean assembleProductionRelease
+
+# 5. Copy APK to artifacts with git SHA in filename (optional)
+cp app/build/outputs/apk/production/release/app-production-release.apk \
+   ../artifacts/apks/production/app-production-release-0.0.42-$(git rev-parse --short HEAD).apk
+
+# 6. Push with tags
+git push origin feature/your-branch
+git push origin android-v0.0.42
+```
+
+**To rebuild a specific version:**
+
+```bash
+# List all Android release tags
+git tag -l "android-v*"
+
+# Checkout a specific version
+git checkout android-v0.0.42
+
+# Rebuild (produces same APK)
+cd android-client
+./gradlew clean assembleProductionRelease
+```
+
+### Benefits
+
+| Scenario | Before | After |
+|----------|--------|-------|
+| **Production bug** | Can't find exact source code | `git checkout <SHA>` → debug |
+| **Reproduce build** | Guesswork based on dates | Exact commit SHA → rebuild |
+| **Support inquiry** | "What version are you on?" | Check logs: commit + timestamp |
+| **Release tracking** | Manual spreadsheet | Git tags + BuildConfig |
+| **Team onboarding** | No history of what was released | Git tags show all releases |
+
+### Viewing Build Info
+
+**From APK file (without running the app):**
+
+```bash
+# Extract BuildConfig.java from APK
+unzip -p app-production-release.apk "*/BuildConfig.class" | strings | grep -E "GIT_|BUILD_"
+
+# Or decompile APK and read BuildConfig
+```
+
+**From running app:**
+
+```bash
+# View logs if app logs build info on startup
+adb logcat | grep "AppInfo"
+
+# Or use Android Studio's App Inspection to read BuildConfig values
+```
+
+### Troubleshooting
+
+**Problem:** `GIT_COMMIT_SHA` shows "unknown"
+
+**Causes:**
+1. Building outside of a git repository
+2. Git not installed on build machine
+3. Shallow git clone (CI/CD)
+
+**Solution:**
+```bash
+# Verify git is accessible during build
+git rev-parse --short HEAD
+
+# For CI/CD, ensure full checkout (not shallow)
+# GitHub Actions example:
+- uses: actions/checkout@v3
+  with:
+    fetch-depth: 0  # Full history, not shallow
+```
+
+**Problem:** Builds are not reproducible (different checksums)
+
+**Cause:** `BUILD_TIMESTAMP` changes with every build
+
+**Solution:**
+- Accept that timestamps will differ
+- Compare APKs by git commit SHA, not file hash
+- Or remove timestamp from BuildConfig if bit-for-bit reproducibility is required
 
 ## CI/CD Integration (Future)
 
@@ -773,10 +1052,14 @@ adb uninstall com.bbtec.mdm.client.staging  # Removes staging
 
 ---
 
-**Last Updated:** 2025-11-11
-**Version:** 2.0 (Offline-First Local Development Update)
-**Android Client Version:** 0.0.39
+**Last Updated:** 2025-11-12
+**Version:** 3.0 (Build Provenance & Security Update)
+**Android Client Version:** 0.0.41
 **Changes:**
+- **Build Provenance**: Git commit SHA, branch, and timestamp injected into every APK
+- **Secure Keystore**: Credentials moved to gitignored `keystore.properties` file
+- Reproducible builds via git commit traceability
+- Git tagging workflow for release management
 - Dynamic IP detection for local development
 - Environment-aware APK streaming (local streams, cloud redirects)
 - Cleartext HTTP support for local flavor
