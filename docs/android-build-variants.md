@@ -562,23 +562,48 @@ Android provisioning requires the APK package name to match exactly what's in th
 
 All builds (debug and release) use **v1 + v2 signing** for maximum compatibility:
 
+### ⚠️  Keystore Security Status
+
+**CRITICAL:** This project has two keystores:
+
+| Keystore | Status | Use Case |
+|----------|--------|----------|
+| `bbtec-mdm.keystore` | ⚠️  **COMPROMISED** | Development/testing only |
+| `bbtec-mdm-PRODUCTION.keystore` | ✅ **SECURE** | Production releases only |
+
+**Development Keystore Compromise:**
+- Password was accidentally exposed in git commit `ae3d684` (2025-11-12)
+- Signed APKs were committed to git history
+- **Safe for local development and testing only**
+- **DO NOT use for production releases or public distribution**
+
+**Full details:** See `../android-client/SECURITY-NOTICE.md`
+
 ### Secure Keystore Management
 
-**IMPORTANT:** Keystore credentials are now stored securely outside of version control.
+**IMPORTANT:** Keystore credentials are stored securely outside of version control.
 
 **Setup (one-time per developer):**
 ```bash
 cd android-client
+
+# For development/testing:
 cp keystore.properties.example keystore.properties
-# Edit keystore.properties with actual passwords (ask team lead)
+# Get credentials from password manager (GNU pass)
+
+# For production releases:
+# Contact team lead for production keystore access
 ```
 
 **File structure:**
 ```
 android-client/
-├── keystore.properties          # Local file with credentials (gitignored!)
-├── keystore.properties.example  # Template for new developers (in git)
-└── bbtec-mdm.keystore          # The actual keystore file
+├── keystore.properties              # Dev credentials (gitignored!)
+├── keystore.properties.example      # Template (in git)
+├── bbtec-mdm.keystore              # Dev keystore (COMPROMISED)
+├── bbtec-mdm-PRODUCTION.keystore   # Production keystore (SECURE, gitignored!)
+├── SECURITY-NOTICE.md              # Compromise documentation
+└── PRODUCTION-KEYSTORE-BACKUP.md   # Production backup guide
 ```
 
 **Configuration (build.gradle.kts):**
@@ -661,8 +686,8 @@ unzip -l app/build/outputs/apk/local/debug/app-local-debug.apk | grep META-INF
 ```bash
 cd android-client
 cp keystore.properties.example keystore.properties
-# Edit keystore.properties with actual credentials (ask team lead)
-# Default password is "android" for development keystore
+# Get credentials from password manager (GNU pass) or team lead
+# See SECURITY-NOTICE.md for keystore details
 ```
 
 ### Can't Install Local After Production (or vice versa)

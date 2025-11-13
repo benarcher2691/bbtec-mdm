@@ -21,6 +21,23 @@ This step-by-step tutorial walks you through building an Android APK from scratc
 
 ---
 
+## ⚠️  Security Notice
+
+**IMPORTANT:** This project has two keystores with different security statuses:
+
+| Keystore | Status | Use Case |
+|----------|--------|----------|
+| `bbtec-mdm.keystore` | ⚠️  COMPROMISED | Development/testing only |
+| `bbtec-mdm-PRODUCTION.keystore` | ✅ SECURE | Production releases only |
+
+**For development/testing builds:** This tutorial uses the development keystore, which is safe for local testing.
+
+**For production releases:** Use the production keystore - see `../android-client/PRODUCTION-KEYSTORE-BACKUP.md`
+
+**Full security details:** See `../android-client/SECURITY-NOTICE.md`
+
+---
+
 ## Step-by-Step Walkthrough
 
 ### **Step 1: Check Current Version**
@@ -464,17 +481,20 @@ Missing keystore password - create keystore.properties or set KEYSTORE_PASSWORD 
 ```bash
 cd android-client
 cp keystore.properties.example keystore.properties
-# Edit keystore.properties with actual credentials (ask team lead)
-# For development keystore, default password is "android"
+# Edit keystore.properties with actual credentials
 ```
 
-**File contents (development):**
-```properties
-storeFile=../bbtec-mdm.keystore
-storePassword=android
-keyAlias=bbtec-mdm
-keyPassword=android
-```
+⚠️  **SECURITY NOTICE:** The development keystore (`bbtec-mdm.keystore`) is compromised and should only be used for local testing. For production releases, use the production keystore. See `../android-client/SECURITY-NOTICE.md` for details.
+
+**For development/testing only:**
+- See `keystore.properties.example` for file structure
+- Development keystore credentials available in secure password store
+- **Never commit keystore.properties to git**
+
+**For production releases:**
+- Use `bbtec-mdm-PRODUCTION.keystore`
+- Credentials stored securely in password manager
+- See `../android-client/PRODUCTION-KEYSTORE-BACKUP.md`
 
 ---
 
