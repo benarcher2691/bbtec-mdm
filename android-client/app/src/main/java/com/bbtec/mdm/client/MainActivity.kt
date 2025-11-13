@@ -68,8 +68,24 @@ class MainActivity : AppCompatActivity() {
                 Log.d(TAG, "Found enrollment token, using DPC registration...")
                 DeviceRegistration(this).registerDeviceWithToken(enrollmentToken)
             } else {
-                Log.d(TAG, "No enrollment token, using fallback registration...")
-                DeviceRegistration(this).registerDevice()
+                // SECURITY: No fallback registration - requires proper QR code enrollment
+                Log.e(TAG, "═══════════════════════════════════════════════════════")
+                Log.e(TAG, "❌ ENROLLMENT ERROR: No enrollment token found")
+                Log.e(TAG, "")
+                Log.e(TAG, "This device must be enrolled via QR code provisioning.")
+                Log.e(TAG, "Fallback registration has been removed for security reasons.")
+                Log.e(TAG, "")
+                Log.e(TAG, "To enroll this device:")
+                Log.e(TAG, "1. Factory reset the device")
+                Log.e(TAG, "2. Scan QR code during setup wizard")
+                Log.e(TAG, "3. Device will receive proper enrollment token")
+                Log.e(TAG, "═══════════════════════════════════════════════════════")
+
+                Toast.makeText(
+                    this,
+                    "Enrollment required: This device must be provisioned via QR code. Please contact your administrator.",
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }
 

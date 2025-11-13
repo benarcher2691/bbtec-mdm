@@ -17,80 +17,9 @@ class DeviceRegistration(private val context: Context) {
     private val gson = Gson()
     private val prefsManager = PreferencesManager(context)
 
-    fun registerDevice() {
-        // Use serial number as device ID - this matches Android Management API's hardwareInfo.serialNumber
-        val deviceId = try {
-            Build.getSerial()
-        } catch (e: SecurityException) {
-            // Fallback to ANDROID_ID if serial number is not accessible
-            Log.w(TAG, "Cannot access serial number, falling back to ANDROID_ID", e)
-            Settings.Secure.getString(
-                context.contentResolver,
-                Settings.Secure.ANDROID_ID
-            )
-        }
-
-        Log.d(TAG, "Registering device with serial: $deviceId")
-
-        val androidId = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ANDROID_ID
-        )
-
-        // Check Device Owner status
-        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        val isDeviceOwner = dpm.isDeviceOwnerApp(context.packageName)
-
-        // Send full device information
-        val json = gson.toJson(mapOf(
-            "deviceId" to deviceId,
-            "serialNumber" to deviceId,
-            "androidId" to androidId,
-            "model" to Build.MODEL,
-            "manufacturer" to Build.MANUFACTURER,
-            "androidVersion" to Build.VERSION.RELEASE,
-            "isDeviceOwner" to isDeviceOwner
-        ))
-
-        val request = Request.Builder()
-            .url("https://bbtec-mdm.vercel.app/api/client/register")
-            .post(json.toRequestBody("application/json".toMediaType()))
-            .build()
-
-        Log.d(TAG, "Sending registration request...")
-        client.newCall(request).enqueue(object : Callback {
-            override fun onResponse(call: Call, response: Response) {
-                Log.d(TAG, "Registration response: ${response.code}")
-                if (response.isSuccessful) {
-                    val body = response.body?.string()
-                    Log.d(TAG, "Registration response body: $body")
-
-                    // Parse response to get API token
-                    val result = gson.fromJson(body, RegistrationResponse::class.java)
-
-                    if (result.success && result.apiToken != null) {
-                        prefsManager.setDeviceId(deviceId)
-                        prefsManager.setApiToken(result.apiToken)
-                        prefsManager.setRegistered(true)
-                        Log.d(TAG, "Registration successful! Token saved.")
-
-                        // Send immediate heartbeat now that we have a token
-                        Log.d(TAG, "Sending immediate heartbeat after registration...")
-                        ApiClient(context).sendHeartbeat()
-                    } else {
-                        Log.e(TAG, "Registration succeeded but no token in response")
-                    }
-                } else {
-                    Log.e(TAG, "Registration failed: ${response.body?.string()}")
-                }
-            }
-
-            override fun onFailure(call: Call, e: java.io.IOException) {
-                Log.e(TAG, "Registration failed with exception", e)
-                // Retry on next app launch
-            }
-        })
-    }
+    // REMOVED: Insecure fallback registration (registerDevice)
+    // All devices must now register via QR code enrollment token using registerDeviceWithToken()
+    // This ensures proper MDM security with user/policy assignment
 
     /**
      * Register device with enrollment token (Device Owner mode)

@@ -2,186 +2,60 @@
 
 **Branch:** `feature/offline-local-dev`
 **Web Version:** 0.0.4
-**Android Version:** 0.0.39
-**Last Updated:** 2025-11-11
+**Android Version:** 0.0.43
+**Last Updated:** 2025-11-13
 
 ---
 
-## Next Steps - Promotion Path
+## Next Steps
 
-### ✅ Critical Issues (RESOLVED - Ready for PR)
+### 🚀 Phase 2: Deploy to Production
 
-#### Issue #1: Preview URL Detection Bug ✅
-**File:** `src/lib/network-detection.ts:45-52`
+**Prerequisites:** Staging validation complete ✅
 
-**Status:** FIXED
+**Steps:**
+1. [ ] Build production APK (`./gradlew assembleProductionRelease`)
+2. [ ] Extract production signature (should match staging: `U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE`)
+3. [ ] Create PR: `development` → `master`
+4. [ ] Configure production environment variables in Vercel
+5. [ ] Deploy Convex schema to production (`npm run convex:deploy:prod`)
+6. [ ] Smoke test enrollment with production APK
+7. [ ] Merge to master (triggers production deployment)
 
-**Solution Implemented:**
-```typescript
-const cloudUrl =
-  configuredAppUrl ||
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
-  'https://bbtec-mdm.vercel.app'
-```
-
-**Result:** Preview deployments now correctly use `VERCEL_URL` instead of defaulting to production.
+**Detailed procedures:** See [docs/deployment-procedures.md](../docs/deployment-procedures.md)
 
 ---
 
-#### Issue #2: APK Signature Hardcoded to Debug Certificate ✅
-**File:** `src/app/api/apk/extract-signature/route.ts` (complete rewrite)
+## Current Priorities
 
-**Status:** FIXED with server-side extraction
+### Priority 1: QR Code Generation Review 📱
+**Status:** NOT STARTED
+**Expected Time:** 2-3 hours
 
-**Solution Implemented:**
-- Server-side API endpoint extracts signature using `apksigner verify --print-certs`
-- Extracts package name using `aapt dump badging`
-- Converts SHA-256 to URL-safe Base64 automatically
-- No hardcoded values - works with any APK
+**Tasks:**
+- [ ] Verify QR code correctness across all environments (local, staging, production)
+- [ ] Test QR code scanning on different devices/scanners
+- [ ] Validate environment detection logic (VERCEL_ENV, NEXT_PUBLIC_CONVEX_URL)
+- [ ] Ensure proper package name mapping per environment:
+  - Local: `com.bbtec.mdm.client` (production package, debug build)
+  - Staging/Preview: `com.bbtec.mdm.client.staging` (staging package, release build)
+  - Production: `com.bbtec.mdm.client` (production package, release build)
+- [ ] Test component name construction (verify no `.staging` in class path)
+- [ ] Verify error correction levels and margins are appropriate
+- [ ] Test enrollment flow end-to-end in each environment
 
-**Documented Signatures:**
-- **Debug (local):** `iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk`
-- **Staging:** `U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE`
+**Why Important:** QR code is the entry point for device enrollment - must be 100% correct in all environments to avoid enrollment failures.
 
-**Helper Script:** `scripts/extract-apk-signature.sh` for manual extraction
-
----
-
-#### Issue #3: Package Name Hardcoded ✅
-**File:** `src/lib/apk-signature-client.ts` (updated)
-
-**Status:** FIXED with server-side extraction
-
-**Solution Implemented:**
-- Client-side now returns placeholders after validation
-- Server-side extracts actual package name from APK manifest
-- Upload flow updated to use server-extracted metadata
-
----
-
-### 📋 Pre-PR Checklist
-
-**Required Fixes:**
-- [x] Fix preview URL detection (add `VERCEL_URL` support)
-- [x] Build staging APK (`./gradlew assembleStagingRelease`)
-- [x] Extract staging APK signature (`apksigner verify --print-certs`)
-- [x] Update signature logic (implemented server-side extraction)
-- [x] Test locally (basic sanity checks passed)
-
-**Recommended:**
-- [x] Document signature extraction process
-- [x] Create helper script for signature extraction (`scripts/extract-apk-signature.sh`)
-- [x] Implement hybrid extraction with environment-aware fallback
-- [x] Test local extraction and enrollment (confirmed working)
-
----
-
-### 🎯 Hybrid Extraction Solution
-
-**Challenge:** Server-side extraction (apksigner/aapt) works locally but not on Vercel (no Android SDK).
-
-**Solution:** Hybrid approach with graceful fallback
-
-#### How It Works:
-
-**Local Development (Android SDK available):**
-```
-1. Upload APK → Convex storage
-2. Extraction endpoint downloads APK
-3. Runs apksigner verify --print-certs
-4. Extracts real SHA-256 signature
-5. Converts to URL-safe Base64
-6. ✅ Dynamic extraction for any APK
-```
-
-**Cloud Deployment (Vercel - no Android SDK):**
-```
-1. Upload APK → Convex storage
-2. Extraction endpoint tries apksigner
-3. Command fails (tools not found)
-4. Falls back to environment detection:
-   - Preview/Production → U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE (release keystore)
-   - Local/Unknown → iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk (debug keystore)
-5. ✅ Returns correct signature for environment
-```
-
-#### Key Insight: Signatures Are Static Per Keystore
-
-**Staging and production use the SAME keystore** (`bbtec-mdm.keystore`)
-- Both have signature: `U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE`
-- Signature doesn't change with version bumps (v0.0.39 → v0.0.40 → v0.0.41...)
-- Only changes if keystore is rotated (rare security event)
-
-**Local development uses debug keystore**
-- Signature: `iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk`
-- Different from release builds
-
-#### When to Update Fallback Values:
-
-✅ **Never for version bumps** - Same keystore = same signature
-✅ **Only when rotating keystores** - Rare security event
-✅ **When adding new environment** - Different keystore = different signature
-
-#### Benefits:
-
-- ✅ Local: Full dynamic extraction (tested with any APK)
-- ✅ Staging: Graceful fallback (works without Android SDK)
-- ✅ Production: Graceful fallback (works without Android SDK)
-- ✅ Maintainable: Update fallback only on keystore rotation (rare)
-- ✅ Safe: Wrong APK → signature mismatch → enrollment fails (prevents accidents)
-
----
-
-### 🚀 Deployment Process
-
-See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for complete deployment guide.
-
-**Quick Summary:**
-
-#### Phase 1: Deploy to Staging (After Fixes)
-1. Fix critical issues above
-2. Create PR: `feature/offline-local-dev` → `development`
-3. Vercel auto-creates preview deployment
-4. Configure preview environment variables (Convex cloud dev)
-5. Deploy Convex schema to cloud dev
-6. Seed cloud dev database
-7. Test enrollment in preview
-8. Merge to development
-
-#### Phase 2: Deploy to Production (After Staging Validation)
-1. Build production APK
-2. Extract production signature
-3. Create PR: `development` → `master`
-4. Configure production environment variables
-5. Deploy Convex schema to production
-6. Smoke test enrollment
-7. Merge to master
-
-**Detailed procedures, testing checklists, and troubleshooting:** See docs/deployment-procedures.md
-
----
-
-## Future Work - Core Functionality
-
-### Priority 1: Security Audit 🔒
-**Status:** IN PROGRESS (command ownership ✅, enrollment/policy endpoints pending)
-
-**What's Needed:**
-- [ ] Audit `/api/dpc/register` endpoint (enrollment token validation)
-- [ ] Audit `/api/client/commands` endpoint (device auth)
-- [ ] Review all Convex functions for proper `ctx.auth.getUserIdentity()` checks
-- [ ] Add rate limiting on registration endpoints
-- [ ] Add audit logging for admin actions (who did what when)
-- [ ] Test for data leakage across user boundaries
-
-**Why Important:** Critical for production readiness and user data security
-
-**Expected Time:** 2-3 days
+**Files to Review:**
+- `src/app/actions/enrollment.ts` - QR code generation logic
+- `src/components/qr-code-generator.tsx` - Client-side QR rendering
+- `src/lib/network-detection.ts` - Environment detection
 
 ---
 
 ### Priority 2: Policy Enforcement 🔐
 **Status:** NOT STARTED (PolicyManager.kt exists but has placeholder logic)
+**Expected Time:** 3-4 days
 
 **What's Needed:**
 - [ ] Fetch assigned policy from backend in Android client
@@ -202,12 +76,11 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 - `convex/deviceClients.ts` (add compliance fields)
 - `src/components/device-list-table.tsx` (show compliance status)
 
-**Expected Time:** 3-4 days
-
 ---
 
 ### Priority 3: Enhanced Device Info 📊
 **Status:** NOT STARTED
+**Expected Time:** 2-3 days
 
 **What's Needed:**
 - [ ] Battery level and charging status
@@ -230,12 +103,11 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 - `convex/deviceClients.ts` (add new fields)
 - `src/components/device-list-table.tsx` (display new info)
 
-**Expected Time:** 2-3 days
-
 ---
 
 ### Priority 4: Field Test Heartbeat Resilience ⏱️
-**Status:** AWAITING FIELD TEST (v0.0.38 features included in v0.0.39)
+**Status:** AWAITING FIELD TEST (v0.0.38 features included in v0.0.41)
+**Expected Time:** 1-2 days (observation period)
 
 **What to Verify:**
 - [ ] Heartbeat updates every 15 minutes (configurable interval)
@@ -253,7 +125,29 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 - Battery optimization whitelist flow
 - System integration (BOOT_COMPLETED, MY_PACKAGE_REPLACED, USER_UNLOCKED)
 
-**Expected Time:** 1-2 days (observation period)
+---
+
+### Priority 5: Security Improvements 🔒
+**Status:** ✅ MAJOR IMPROVEMENTS COMPLETE (2025-11-13)
+
+**Completed Security Enhancements:**
+- [x] ✅ Removed all debug endpoints (env, test-apk, qr-json) - 2025-11-13
+- [x] ✅ Removed insecure fallback registration (`/api/client/register`) - 2025-11-13
+- [x] ✅ All devices now require QR code enrollment token (proper MDM flow) - 2025-11-13
+- [x] ✅ Android client updated to enforce enrollment-only registration (v0.0.43)
+- [x] ✅ APK downloads now require valid enrollment token (`/api/apps/[storageId]`) - 2025-11-13
+
+**Optional Future Enhancements:**
+- [ ] Add rate limiting on DPC registration endpoint (prevent token brute force)
+- [ ] Add audit logging for admin actions (who did what when)
+
+**Current Security Posture:** ✅ Production-Ready
+- All Convex functions properly protected with `ctx.auth.getUserIdentity()`
+- Device token authentication working correctly
+- No publicly exposed sensitive endpoints
+- All device registrations require valid enrollment tokens
+- APK downloads require valid enrollment tokens (prevents unauthorized access)
+- Proper user/policy assignment enforced at enrollment
 
 ---
 
@@ -264,7 +158,7 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 - [ ] Policy deletion protection (prevent deleting policies with active tokens)
 - [ ] Comprehensive error handling with better error messages
 - [ ] Performance optimization (database indexes, query optimization)
-- [ ] **Multi-tenancy architecture review**: Currently single-tenant per Clerk user (each user has isolated policies/devices/tokens). Consider adding shared organization/team concept with role-based access control if multiple users need to collaborate on same device fleet. Current design works for SaaS model, but may need adjustment for internal company tool use case.
+- [ ] **Multi-tenancy architecture review**: Currently single-tenant per Clerk user (each user has isolated policies/devices/tokens). Consider adding shared organization/team concept with role-based access control if multiple users need to collaborate on same device fleet.
 
 ### UI/UX Polish
 - [ ] Command history UI (audit trail of all commands sent to devices)
@@ -282,7 +176,9 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 
 ---
 
-## Architecture Reference
+## Technical Reference
+
+### Architecture
 
 **Backend:**
 - Next.js 15 (App Router) - Web UI
@@ -293,10 +189,11 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 **Android Client:**
 - Kotlin, Android 10+ (API 29+)
 - Device Owner mode (full device control)
-- Current version: v0.0.39 (offline-first + resilience system)
-- Features: Offline enrollment, device commands, ping interval config, app installation
-- Security: Three separate IDs (enrollmentId, ssaId, serialNumber), URL-safe Base64 signatures
+- Current version: v0.0.43 (enforced enrollment-only registration)
+- Features: Offline enrollment, device commands, ping interval config, app installation, dynamic server URL
+- Security: Three separate IDs (enrollmentId, ssaId, serialNumber), URL-safe Base64 signatures, enrollment token required
 - Reliability: Multi-layered heartbeat (foreground service + watchdog + WorkManager + system integration)
+- Environment Support: Uses enrollment server URL for staging/preview, BuildConfig for local/production
 
 **Environments:**
 - **Local**: Offline development (Convex at 127.0.0.1:3210, auto-detects LAN IP)
@@ -305,7 +202,47 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 
 ---
 
-## Current Devices
+### Hybrid APK Signature Extraction
+
+**How It Works:**
+
+**Local Development (Android SDK available):**
+1. Upload APK → Convex storage
+2. Extraction endpoint downloads APK
+3. Runs `apksigner verify --print-certs`
+4. Extracts real SHA-256 signature
+5. Converts to URL-safe Base64
+6. ✅ Dynamic extraction for any APK
+
+**Cloud Deployment (Vercel - no Android SDK):**
+1. Upload APK → Convex storage
+2. Extraction endpoint tries apksigner
+3. Command fails (tools not found)
+4. Falls back to environment detection:
+   - Preview/Production → `U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE` (release keystore)
+   - Local/Unknown → `iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk` (debug keystore)
+5. ✅ Returns correct signature for environment
+
+**Key Insight:** Signatures are static per keystore
+- Staging and production use the SAME keystore (`bbtec-mdm.keystore`)
+- Signature doesn't change with version bumps
+- Only changes if keystore is rotated (rare security event)
+
+**When to Update Fallback Values:**
+- ✅ **Never for version bumps** - Same keystore = same signature
+- ✅ **Only when rotating keystores** - Rare security event
+- ✅ **When adding new environment** - Different keystore = different signature
+
+---
+
+### Current Devices
+
+**Test Device: Lenovo TB-X606F**
+- Serial: HPV4CZ99
+- Android: 10 (API 29)
+- App Version: v0.0.41 (staging)
+- Environment: Staging/Preview
+- Status: ✅ Enrolled as Device Owner, sync working
 
 **Device 1: Hannspree HSG1416**
 - Serial: 1286Z2HN00621
@@ -316,7 +253,7 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 **Device 2: Hannspree HSG1416**
 - Serial: 313VC2HN00110
 - Android: 10 (API 29)
-- App Version: Requires enrollment with v0.0.39
+- App Version: Requires enrollment with v0.0.41
 - Status: ⚠️ Needs re-enrollment
 
 ---
@@ -335,6 +272,7 @@ See **[docs/deployment-procedures.md](../docs/deployment-procedures.md)** for co
 **Planning (planning/):**
 - `PLAN.md` - This document (current plan with actionable tasks)
 - `ROADMAP-NEXT-STEPS.md` - Long-term roadmap and feature backlog
+- `SECURITY-AUDIT-2025-11-12.md` - Security audit results
 
 **Historical (planning/archive/):**
 - `2025-11-session/` - Completed planning docs and research
@@ -357,7 +295,7 @@ feature/* branches           ← Local development
 ```
 
 **Current Branch:** `feature/offline-local-dev`
-**Next Action:** Fix critical issues, then create PR to `development`
+**Current Status:** All staging issues resolved, ready for production promotion
 
 ---
 
@@ -412,17 +350,6 @@ npm run convex:deploy:prod
 # Or use scripts directly:
 ./scripts/deploy-convex-dev.sh
 ./scripts/deploy-convex-prod.sh
-```
-
-### Environment Switching
-```bash
-# DON'T manually switch .env.local anymore!
-# Use deployment scripts above instead (they preserve local settings)
-
-# For reference, environments are:
-# Local: http://127.0.0.1:3210 (CONVEX_DEPLOYMENT=local:local-ben_archer2691-bbtec_mdm)
-# Cloud Dev: https://kindly-mule-339.convex.cloud (CONVEX_DEPLOYMENT=prod:kindly-mule-339)
-# Production: https://expert-lemur-691.convex.cloud (CONVEX_DEPLOYMENT=prod:expert-lemur-691)
 ```
 
 ### Git Operations

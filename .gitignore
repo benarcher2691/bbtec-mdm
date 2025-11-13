@@ -11,6 +11,8 @@ yarn-error.log*
 .env.development
 .env.production
 .env.local.backup
+.env.prod
+.env.vercel.*
 
 # Credentials
 credentials.json
@@ -64,6 +66,7 @@ android-client/.externalNativeBuild/
 android-client/.cxx/
 android-client/release-key.jks
 android-client/*.keystore
+android-client/keystore.properties
 *.apk
 # Exception: Allow APKs in artifacts directory
 !artifacts/**/*.apk

@@ -397,10 +397,16 @@ keytool -genkeypair -v \
   -keyalg RSA \
   -keysize 2048 \
   -validity 10000 \
-  -storepass android \
-  -keypass android \
+  -storepass YOUR_STRONG_PASSWORD \
+  -keypass YOUR_STRONG_PASSWORD \
   -dname "CN=My MDM, OU=Development, O=MyCompany, L=City, ST=State, C=US"
 ```
+
+⚠️  **SECURITY WARNING:**
+- **DO NOT use "android" as password for production** (insecure, commonly known)
+- Use strong random passwords (32+ characters)
+- Store keystore and passwords securely (password manager, not in git)
+- **Never commit keystore files to version control**
 
 **Sign APK:**
 ```bash
@@ -412,8 +418,8 @@ jarsigner -verbose \
   -sigalg SHA256withRSA \
   -digestalg SHA-256 \
   -keystore my-mdm.keystore \
-  -storepass android \
-  -keypass android \
+  -storepass YOUR_STRONG_PASSWORD \
+  -keypass YOUR_STRONG_PASSWORD \
   app/build/outputs/apk/release/app-release.apk \
   my-mdm
 
@@ -424,7 +430,7 @@ jarsigner -verify -verbose -certs app/build/outputs/apk/release/app-release.apk
 **Extract signature checksum:**
 ```bash
 # Get certificate SHA-256 hash
-keytool -list -v -keystore my-mdm.keystore -storepass android -alias my-mdm | \
+keytool -list -v -keystore my-mdm.keystore -storepass YOUR_STRONG_PASSWORD -alias my-mdm | \
   grep "SHA256:" | \
   awk '{print $2}' | \
   sed 's/://g' | \

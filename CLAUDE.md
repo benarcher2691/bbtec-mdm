@@ -394,3 +394,25 @@ adb install -r app/build/outputs/apk/staging/release/app-staging-release.apk
 Because each flavor has a different Application ID, you can install all three simultaneously for testing/comparison.
 
 **Full documentation:** See [`docs/android-build-variants.md`](docs/android-build-variants.md)
+
+### ⚠️  Android Keystore Security Notice
+
+**IMPORTANT:** The current Android keystore (`bbtec-mdm.keystore`) is **COMPROMISED** and should only be used for development/testing.
+
+**Status:** Development/Testing ONLY
+- Keystore password was leaked in git commit `ae3d684` (2025-11-12)
+- Signed APKs were committed to git history
+- See `android-client/SECURITY-NOTICE.md` for full details
+
+**Safe for:**
+- ✅ Local development and testing
+- ✅ Educational purposes
+- ✅ Internal prototyping
+
+**DO NOT use for:**
+- ❌ Production releases
+- ❌ Google Play Store distribution
+- ❌ Public app distribution
+- ❌ Apps handling sensitive user data
+
+**For production deployment:** Generate a new keystore with strong passwords and store securely. Never commit keystore files or passwords to git.

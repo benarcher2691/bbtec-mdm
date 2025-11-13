@@ -244,7 +244,10 @@ cd android-client
 
 **Package Name:** `com.bbtec.mdm.client` (no suffix)
 
-**Signing:** Production keystore (`bbtec-mdm.keystore`)
+**Signing:** ⚠️  **Use PRODUCTION keystore only** (`bbtec-mdm-PRODUCTION.keystore`)
+- Development keystore is compromised (see `../android-client/SECURITY-NOTICE.md`)
+- Production keystore credentials in password manager
+- See `../android-client/PRODUCTION-KEYSTORE-BACKUP.md`
 
 ---
 
