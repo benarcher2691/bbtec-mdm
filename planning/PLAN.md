@@ -2,7 +2,7 @@
 
 **Branch:** `feature/offline-local-dev`
 **Web Version:** 0.0.4
-**Android Version:** 0.0.42
+**Android Version:** 0.0.43
 **Last Updated:** 2025-11-13
 
 ---
@@ -128,18 +128,25 @@
 ---
 
 ### Priority 5: Security Improvements 🔒
-**Status:** NOT STARTED (critical fixes complete)
+**Status:** ✅ MAJOR IMPROVEMENTS COMPLETE (2025-11-13)
 
-**Optional Enhancements:**
-- [ ] Add rate limiting on registration endpoints (design review needed)
+**Completed Security Enhancements:**
+- [x] ✅ Removed all debug endpoints (env, test-apk, qr-json) - 2025-11-13
+- [x] ✅ Removed insecure fallback registration (`/api/client/register`) - 2025-11-13
+- [x] ✅ All devices now require QR code enrollment token (proper MDM flow) - 2025-11-13
+- [x] ✅ Android client updated to enforce enrollment-only registration (v0.0.43)
+
+**Optional Future Enhancements:**
+- [ ] Add rate limiting on DPC registration endpoint (prevent token brute force)
 - [ ] Review APK download security (public access vs. device auth)
 - [ ] Add audit logging for admin actions (who did what when)
-- [ ] Design review: Are public endpoints intentional? (registration, APK downloads)
 
-**Current Security Posture:** ✅ Excellent
+**Current Security Posture:** ✅ Production-Ready
 - All Convex functions properly protected with `ctx.auth.getUserIdentity()`
 - Device token authentication working correctly
-- No publicly exposed sensitive endpoints (debug endpoint removed 2025-11-13)
+- No publicly exposed sensitive endpoints
+- All device registrations require valid enrollment tokens
+- Proper user/policy assignment enforced at enrollment
 
 ---
 
@@ -181,9 +188,9 @@
 **Android Client:**
 - Kotlin, Android 10+ (API 29+)
 - Device Owner mode (full device control)
-- Current version: v0.0.42
+- Current version: v0.0.43 (enforced enrollment-only registration)
 - Features: Offline enrollment, device commands, ping interval config, app installation, dynamic server URL
-- Security: Three separate IDs (enrollmentId, ssaId, serialNumber), URL-safe Base64 signatures
+- Security: Three separate IDs (enrollmentId, ssaId, serialNumber), URL-safe Base64 signatures, enrollment token required
 - Reliability: Multi-layered heartbeat (foreground service + watchdog + WorkManager + system integration)
 - Environment Support: Uses enrollment server URL for staging/preview, BuildConfig for local/production
 
