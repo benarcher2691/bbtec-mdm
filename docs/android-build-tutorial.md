@@ -66,13 +66,34 @@ versionNameSuffix = "-staging"
 
 ---
 
-### **Step 2: Bump Version**
+### **Step 2: Decide on Version (Bump if Needed)**
 
-Let's increment the version from 0.0.42 to 0.0.43:
+From Step 1, you saw the version in `build.gradle.kts` (e.g., version 43).
+
+**This is the version that will be built into your next APK.**
+
+**💡 Check what's been previously released:**
+```bash
+git tag -l "android-v*" | sort -V | tail -5
+```
+
+**Example output:**
+```
+android-v0.0.42
+```
+
+**Now decide:**
+- Latest tag is `android-v0.0.42`, build.gradle.kts shows `43` → **Version 43 is NEW**
+- You want to build version 43 → **Skip to Step 3** (no bumping needed)
+- You want to build version 44 instead → **Bump it below**
+
+---
+
+**To manually bump the version (example: 43 → 44):**
 
 ```bash
-sed -i 's/versionCode = 42/versionCode = 43/' app/build.gradle.kts
-sed -i 's/versionName = "0.0.42"/versionName = "0.0.43"/' app/build.gradle.kts
+sed -i 's/versionCode = 43/versionCode = 44/' app/build.gradle.kts
+sed -i 's/versionName = "0.0.43"/versionName = "0.0.44"/' app/build.gradle.kts
 ```
 
 **Verify the change:**
@@ -82,18 +103,20 @@ grep -A2 "versionCode\|versionName" app/build.gradle.kts | grep -E "versionCode|
 
 **Expected output:**
 ```
-versionCode = 43
-versionName = "0.0.43"
+versionCode = 44
+versionName = "0.0.44"
 versionNameSuffix = "-local"
 versionNameSuffix = "-staging"
 ```
 
-✅ **Key check:** First two lines should now show `43` and `"0.0.43"`
+✅ **Key check:** First two lines should show the version you want to build
 
-**💡 Version numbering convention:**
+**💡 Important notes:**
+- **Versions are NEVER automatically bumped** - you must change them manually
 - `versionCode` - Must increment with every release (Google Play requirement)
-- `versionName` - Semantic versioning: `MAJOR.MINOR.PATCH` (e.g., 0.0.43)
+- `versionName` - Semantic versioning: `MAJOR.MINOR.PATCH` (e.g., 0.0.44)
 - All three flavors (local, staging, production) share the same base version
+- **The version in build.gradle.kts IS what will be built into your APK**
 
 ---
 
@@ -122,25 +145,86 @@ BUILD SUCCESSFUL in 5s
 
 ---
 
-### **Step 4: Build Local Debug APK**
+### **Step 4: Build APK (Choose Your Environment)**
 
-Now build the APK with build provenance:
+The project supports three build environments. Choose the one you need:
+
+#### **Option A: Local Development (Debug Build)**
+
+**When to use:** Testing on physical device connected via USB with `adb reverse` port forwarding.
 
 ```bash
 ./gradlew assembleLocalDebug
 ```
 
-**Expected output (at the end):**
+**Output location:**
+```
+app/build/outputs/apk/local/debug/app-local-debug.apk
+```
+
+**Configuration:**
+- Package: `com.bbtec.mdm.client` (base package)
+- Server: `http://localhost:3000/api/client` (requires `adb reverse tcp:3000 tcp:3000`)
+- Keystore: Debug keystore (unsigned for development)
+- Can coexist with: Staging APK (different package name)
+
+---
+
+#### **Option B: Staging (Release Build)**
+
+**When to use:** Testing against Vercel preview deployment (development branch on cloud).
+
+```bash
+./gradlew assembleStagingRelease
+```
+
+**Output location:**
+```
+app/build/outputs/apk/staging/release/app-staging-release.apk
+```
+
+**Configuration:**
+- Package: `com.bbtec.mdm.client.staging` (staging suffix)
+- Server: `https://bbtec-mdm-git-development.vercel.app/api/client`
+- Keystore: Release keystore (`bbtec-mdm.keystore` - requires `keystore.properties`)
+- Can coexist with: Local and Production APKs (different package names)
+
+---
+
+#### **Option C: Production (Release Build)**
+
+**When to use:** Building final APK for production deployment or real device provisioning.
+
+```bash
+./gradlew assembleProductionRelease
+```
+
+**Output location:**
+```
+app/build/outputs/apk/production/release/app-production-release.apk
+```
+
+**Configuration:**
+- Package: `com.bbtec.mdm.client` (base package)
+- Server: `https://bbtec-mdm.vercel.app/api/client`
+- Keystore: Release keystore (`bbtec-mdm.keystore` - requires `keystore.properties`)
+- **CANNOT** coexist with: Local APK (same package name)
+
+---
+
+#### **Build Output**
+
+**Expected output (at the end of any build):**
 ```
 BUILD SUCCESSFUL in 25s
 45 actionable tasks: 45 executed
 ```
 
-**What this does:**
+**What every build does:**
 - Compiles Kotlin source code
-- Injects git metadata (commit SHA, branch, timestamp)
+- Injects git metadata (commit SHA, branch, timestamp) via `BuildConfig`
 - Packages everything into an APK
-- Signs with debug keystore
+- Signs with appropriate keystore (debug or release)
 - Takes ~20-40 seconds (first build after clean)
 
 **Expected warnings (IGNORE THESE - they're harmless):**
@@ -152,7 +236,7 @@ w: file:///.../DeviceRegistration.kt:108:13: Variable 'adminComponent' is never 
 These are Kotlin compiler warnings about unused variables in your code - they don't affect the build.
 
 **Troubleshooting:**
-- **Error: "Missing keystore password"** - See troubleshooting section below
+- **Error: "Missing keystore password"** (staging/production only) - You need `keystore.properties` file. See troubleshooting section below.
 - **Build hangs** - First build downloads dependencies; may take 2-3 minutes
 - **Out of memory** - Increase Gradle memory in `gradle.properties`
 
@@ -160,13 +244,24 @@ These are Kotlin compiler warnings about unused variables in your code - they do
 
 ### **Step 5: Verify APK Was Created**
 
-Check that the APK file exists and note its size:
+Check that the APK file exists and note its size (adjust path based on which environment you built):
 
+**For Local Debug:**
 ```bash
 ls -lh app/build/outputs/apk/local/debug/
 ```
 
-**Expected output:**
+**For Staging Release:**
+```bash
+ls -lh app/build/outputs/apk/staging/release/
+```
+
+**For Production Release:**
+```bash
+ls -lh app/build/outputs/apk/production/release/
+```
+
+**Expected output (example for Local Debug):**
 ```
 Permissions Size User Date Modified Name
 .rw-r--r--   15M ben  12 Nov 21:51   app-local-debug.apk
@@ -174,26 +269,35 @@ Permissions Size User Date Modified Name
 ```
 
 ✅ **Success indicators:**
-- `app-local-debug.apk` file exists
-- Size is ~15 MB (debug APKs are larger than release)
+- APK file exists with correct naming:
+  - Local: `app-local-debug.apk`
+  - Staging: `app-staging-release.apk`
+  - Production: `app-production-release.apk`
+- Size is ~10-15 MB (debug APKs are slightly larger than release)
 - Timestamp shows recent build time
-
-**APK location:**
-```
-Full path: /home/ben/sandbox/bbtec-mdm/android-client/app/build/outputs/apk/local/debug/app-local-debug.apk
-```
 
 ---
 
 ### **Step 6: Check Build Provenance (The Magic!)**
 
-This is where we verify that git metadata was injected into the APK:
+This is where we verify that git metadata was injected into the APK.
 
+**For Local Debug:**
 ```bash
 cat app/build/generated/source/buildConfig/local/debug/com/bbtec/mdm/client/BuildConfig.java | grep -E "VERSION|GIT_|BUILD_"
 ```
 
-**Expected output:**
+**For Staging Release:**
+```bash
+cat app/build/generated/source/buildConfig/staging/release/com/bbtec/mdm/client/BuildConfig.java | grep -E "VERSION|GIT_|BUILD_"
+```
+
+**For Production Release:**
+```bash
+cat app/build/generated/source/buildConfig/production/release/com/bbtec/mdm/client/BuildConfig.java | grep -E "VERSION|GIT_|BUILD_"
+```
+
+**Expected output (example for Local Debug):**
 ```java
 public static final String BUILD_TYPE = "debug";
 public static final int VERSION_CODE = 43;
@@ -203,11 +307,16 @@ public static final String GIT_BRANCH = "feature/offline-local-dev";
 public static final String GIT_COMMIT_SHA = "47e035b";
 ```
 
+**Note:** VERSION_NAME suffix changes per environment:
+- Local: `"0.0.43-local"`
+- Staging: `"0.0.43-staging"`
+- Production: `"0.0.43"` (no suffix)
+
 🎉 **This is build provenance in action!**
 
 **What you're seeing:**
-- `VERSION_CODE = 43` - Your bumped version ✅
-- `VERSION_NAME = "0.0.43-local"` - Version with `-local` suffix ✅
+- `VERSION_CODE = 43` - Your version number ✅
+- `VERSION_NAME` - Version with environment-specific suffix ✅
 - `GIT_COMMIT_SHA = "47e035b"` - The exact git commit this APK was built from ✅
 - `GIT_BRANCH = "feature/..."` - The branch name ✅
 - `BUILD_TIMESTAMP` - Exact build time (ISO 8601 format) ✅
@@ -221,39 +330,66 @@ public static final String GIT_COMMIT_SHA = "47e035b";
 
 ### **Step 7: Verify APK Package Metadata**
 
-Extract and verify the APK's Android metadata:
+Extract and verify the APK's Android metadata using `aapt`.
 
+**For Local Debug:**
 ```bash
 /opt/android-sdk/build-tools/34.0.0/aapt dump badging app/build/outputs/apk/local/debug/app-local-debug.apk | grep -E "package:|versionCode|versionName"
 ```
 
-**Expected output:**
+**For Staging Release:**
+```bash
+/opt/android-sdk/build-tools/34.0.0/aapt dump badging app/build/outputs/apk/staging/release/app-staging-release.apk | grep -E "package:|versionCode|versionName"
+```
+
+**For Production Release:**
+```bash
+/opt/android-sdk/build-tools/34.0.0/aapt dump badging app/build/outputs/apk/production/release/app-production-release.apk | grep -E "package:|versionCode|versionName"
+```
+
+**Expected output (example for Local Debug):**
 ```
 package: name='com.bbtec.mdm.client' versionCode='43' versionName='0.0.43-local' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
 ```
 
+**Expected package names per environment:**
+- Local: `com.bbtec.mdm.client` (base package)
+- Staging: `com.bbtec.mdm.client.staging` (with `.staging` suffix)
+- Production: `com.bbtec.mdm.client` (base package)
+
 ✅ **Verify these values:**
-- `name='com.bbtec.mdm.client'` - Package name (local and production share this)
+- `name=` - Package name matches environment ✅
 - `versionCode='43'` - Matches what you set ✅
-- `versionName='0.0.43-local'` - Matches with `-local` suffix ✅
-- `compileSdkVersion='34'` - Android 14 (API level 34)
+- `versionName='0.0.43-...'` - Matches with environment suffix ✅
+- `compileSdkVersion='34'` - Android 14 (API level 34) ✅
 
 **What this verifies:**
 - APK metadata is correct
 - Android will recognize the version
-- Package name allows device provisioning
+- Package name matches the environment
 
 ---
 
 ### **Step 8: Verify APK Signing**
 
-Check that the APK is properly signed:
+Check that the APK is properly signed.
 
+**For Local Debug:**
 ```bash
 /opt/android-sdk/build-tools/34.0.0/apksigner verify --verbose app/build/outputs/apk/local/debug/app-local-debug.apk | grep "Verified using"
 ```
 
-**Expected output:**
+**For Staging Release:**
+```bash
+/opt/android-sdk/build-tools/34.0.0/apksigner verify --verbose app/build/outputs/apk/staging/release/app-staging-release.apk | grep "Verified using"
+```
+
+**For Production Release:**
+```bash
+/opt/android-sdk/build-tools/34.0.0/apksigner verify --verbose app/build/outputs/apk/production/release/app-production-release.apk | grep "Verified using"
+```
+
+**Expected output (All Builds):**
 ```
 Verified using v1 scheme (JAR signing): false
 Verified using v2 scheme (APK Signature Scheme v2): true
@@ -261,15 +397,21 @@ Verified using v3 scheme (APK Signature Scheme v3): false
 ```
 
 **What this means:**
-- **Debug builds:** v2-only signing (faster, sufficient for testing)
-- **Release builds:** v1+v2 signing (required for APK signature extraction)
+- Modern Android Gradle Plugin (AGP 7.0+) uses **v2-only signing** by default for minSdk 29+
+- v2 signing is more secure and sufficient for modern devices
+- v1 signing (JAR signing) is legacy and only needed for older Android versions (<7.0)
 
-✅ **For local debug APK, v2-only is correct and expected!**
+✅ **Verification:**
+- v2 signing present = correct ✅
+- v1 can be omitted for minSdk 29+ ✅
 
 **Why signing matters:**
 - Android requires all APKs to be signed
 - Debug builds use debug keystore (automatic)
 - Release builds use production keystore (configured in `keystore.properties`)
+- Signature can be extracted from v2-signed APKs using `apksigner verify --print-certs`
+
+**Note:** Even though `build.gradle.kts` enables v1 signing, modern AGP may skip it when minSdk is high enough. This is expected and correct behavior.
 
 ---
 
