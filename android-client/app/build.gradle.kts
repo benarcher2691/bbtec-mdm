@@ -65,8 +65,8 @@ android {
         applicationId = "com.bbtec.mdm.client"
         minSdk = 29
         targetSdk = 34
-        versionCode = 43
-        versionName = "0.0.43"
+        versionCode = 44
+        versionName = "0.0.44"
 
         // BUILD PROVENANCE - Inject git metadata into APK
         // Access these in your app via BuildConfig.GIT_COMMIT_SHA, etc.
