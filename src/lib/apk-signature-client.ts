@@ -14,40 +14,37 @@ export interface ApkMetadata {
 
 /**
  * Parse APK file in the browser
- * Extracts metadata from AndroidManifest.xml and META-INF/CERT.RSA
+ * Performs basic validation and extracts version from filename
+ *
+ * NOTE: Signature and package name extraction is now done server-side
+ * via /api/apk/extract-signature using apksigner and aapt tools
+ *
+ * This function returns placeholder values that will be replaced by
+ * server-side extraction in the upload flow.
  */
 export async function parseApkMetadataClient(file: File): Promise<ApkMetadata> {
   try {
     const zip = await JSZip.loadAsync(file)
 
-    // Extract AndroidManifest.xml (binary XML, needs parsing)
+    // Validate APK structure
     const manifestFile = zip.file('AndroidManifest.xml')
     if (!manifestFile) {
       throw new Error('AndroidManifest.xml not found in APK')
     }
 
-    // Extract certificate for signature checksum
+    // Validate certificate exists
     const certFile = zip.file(/^META-INF\/.*\.(RSA|DSA|EC)$/i)[0]
     if (!certFile) {
       throw new Error('No certificate found in META-INF/')
     }
 
-    const certData = await certFile.async('uint8array')
-    // const signatureChecksum = await calculateSignatureChecksum(certData)
-
-    // TEMPORARY FIX: Client-side signature extraction is complex (PKCS#7 parsing)
-    // Since we only have one keystore, hardcode the correct signature
-    // TODO: Implement proper PKCS#7/X.509 certificate extraction
-    // NOTE: Must use URL-safe base64 without padding for Android provisioning
-    const signatureChecksum = 'U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE'
-
-    // For now, return placeholder values for manifest parsing
-    // TODO: Implement binary XML parser or extract from APK filename
+    // Return placeholder values
+    // These will be replaced by server-side extraction
     return {
-      packageName: 'com.bbtec.mdm.client', // TODO: Parse from manifest
+      packageName: 'placeholder', // Will be extracted server-side
       versionName: extractVersionFromFilename(file.name),
-      versionCode: 3, // Hardcoded - matches build.gradle.kts
-      signatureChecksum,
+      versionCode: 0, // Will be extracted server-side
+      signatureChecksum: 'placeholder', // Will be extracted server-side
     }
   } catch (error) {
     console.error('APK parsing error:', error)

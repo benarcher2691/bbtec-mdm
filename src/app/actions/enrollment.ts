@@ -5,6 +5,7 @@ import QRCode from 'qrcode'
 import { ConvexHttpClient } from 'convex/browser'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
+import { detectServerUrl } from '@/lib/network-detection'
 
 async function getAuthenticatedConvexClient() {
   const { getToken } = await auth()
@@ -40,7 +41,18 @@ export async function createEnrollmentQRCode(
 
   try {
     const convex = await getAuthenticatedConvexClient()
-    const serverUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bbtec-mdm.vercel.app"
+
+    // Dynamic server URL detection (environment-aware)
+    const networkDetection = detectServerUrl('[QR-GEN]')
+    const serverUrl = networkDetection.serverUrl
+
+    console.log('[QR-GEN] Network detection result:', {
+      serverUrl: networkDetection.serverUrl,
+      environment: networkDetection.environment,
+      isLocal: networkDetection.isLocal,
+      detectedIp: networkDetection.detectedIp,
+      detectionMethod: networkDetection.detectionMethod
+    })
 
     // DPC configuration based on type
     let dpcConfig: {
@@ -51,6 +63,22 @@ export async function createEnrollmentQRCode(
       version?: string
     }
 
+    // Create enrollment token FIRST (needed for APK URL)
+    const tokenId = await convex.mutation(api.enrollmentTokens.createEnrollmentToken, {
+      policyId,
+      expiresInSeconds: duration,
+      companyUserId,
+    })
+
+    const token = await convex.query(api.enrollmentTokens.getToken, { tokenId })
+
+    if (!token) {
+      return {
+        success: false,
+        error: 'Failed to create enrollment token',
+      }
+    }
+
     if (dpcType === 'testdpc') {
       // Google Test DPC for comparison testing
       // Hardcoded values (upload code has signature extraction bug)
@@ -58,7 +86,7 @@ export async function createEnrollmentQRCode(
       dpcConfig = {
         componentName: 'com.afwsamples.testdpc/com.afwsamples.testdpc.DeviceAdminReceiver',
         packageName: 'com.afwsamples.testdpc',
-        apkUrl: `${serverUrl}/api/apps/${testdpcStorageId}`,
+        apkUrl: `${serverUrl}/api/apps/${testdpcStorageId}?token=${token.token}`,
         signatureChecksum: 'gJD2YwtOiWJHkSMkkIfLRlj-quNqG1fb6v100QmzM9w', // Correct TestDPC signature
         version: '9.0.12 (TestDPC)',
       }
@@ -74,31 +102,46 @@ export async function createEnrollmentQRCode(
         }
       }
 
+      // Environment-aware package configuration
+      // This enforces using the correct APK variant for each environment
+      const isPreview = process.env.VERCEL_ENV === 'preview'
+      const isLocal = process.env.NEXT_PUBLIC_CONVEX_URL?.includes('127.0.0.1')
+
+      let packageName: string
+      let environmentName: string
+
+      if (isPreview) {
+        // Preview/staging deployments use staging APK
+        packageName = 'com.bbtec.mdm.client.staging'
+        environmentName = 'PREVIEW/STAGING'
+      } else if (isLocal) {
+        // Local development uses production package (for provisioning testing)
+        packageName = 'com.bbtec.mdm.client'
+        environmentName = 'LOCAL'
+      } else {
+        // Production uses production package
+        packageName = 'com.bbtec.mdm.client'
+        environmentName = 'PRODUCTION'
+      }
+
+      // Component name: package changes, but class path stays com.bbtec.mdm.client.MdmDeviceAdminReceiver
+      // Example: com.bbtec.mdm.client.staging/com.bbtec.mdm.client.MdmDeviceAdminReceiver
+      const componentName = `${packageName}/com.bbtec.mdm.client.MdmDeviceAdminReceiver`
+
       dpcConfig = {
-        componentName: 'com.bbtec.mdm.client/com.bbtec.mdm.client.MdmDeviceAdminReceiver',
-        packageName: 'com.bbtec.mdm.client',
-        apkUrl: `${serverUrl}/api/apps/${currentApk.storageId}`,
+        componentName,
+        packageName,
+        apkUrl: `${serverUrl}/api/apps/${currentApk.storageId}?token=${token.token}`,
         signatureChecksum: currentApk.signatureChecksum,
         version: currentApk.version,
       }
+
+      console.log('[QR GEN] Environment:', environmentName)
+      console.log('[QR GEN] VERCEL_ENV:', process.env.VERCEL_ENV)
+      console.log('[QR GEN] Package name:', packageName)
+      console.log('[QR GEN] Component name:', componentName)
       console.log('[QR GEN] APK URL (redirect):', dpcConfig.apkUrl)
       console.log('[QR GEN] Storage ID:', currentApk.storageId)
-    }
-
-    // Create enrollment token
-    const tokenId = await convex.mutation(api.enrollmentTokens.createEnrollmentToken, {
-      policyId,
-      expiresInSeconds: duration,
-      companyUserId,
-    })
-
-    const token = await convex.query(api.enrollmentTokens.getToken, { tokenId })
-
-    if (!token) {
-      return {
-        success: false,
-        error: 'Failed to create enrollment token',
-      }
     }
 
     // Build Android provisioning JSON (custom DPC format)
@@ -144,8 +187,8 @@ export async function createEnrollmentQRCode(
     }
     const qrCodeDataUrl = await QRCode.toDataURL(qrContent, {
       width: 512,
-      margin: 4,
-      errorCorrectionLevel: 'M',  // Medium error correction (H was too complex)
+      margin: 2,  // Reduced margin for denser content
+      errorCorrectionLevel: 'L',  // Low error correction for longer URLs (preview deployments)
       color: {
         dark: '#000000',
         light: '#FFFFFF'
@@ -165,6 +208,12 @@ export async function createEnrollmentQRCode(
         storageId: dpcConfig.apkUrl.split('/').pop() || '',
         convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
         dpcType,
+        networkDetection: {
+          environment: networkDetection.environment,
+          isLocal: networkDetection.isLocal,
+          detectedIp: networkDetection.detectedIp,
+          detectionMethod: networkDetection.detectionMethod,
+        },
       },
     }
   } catch (error) {

@@ -82,18 +82,9 @@ export function DpcApkManager() {
         throw new Error('Invalid APK file format')
       }
 
-      // Stage 2: Parse metadata (client-side using JSZip)
-      setStatus({ stage: 'parsing', progress: 25, message: 'Extracting APK metadata...' })
-      const metadata = await parseApkMetadataClient(file)
-
-      setApkInfo({
-        packageName: metadata.packageName,
-        versionName: metadata.versionName,
-        versionCode: metadata.versionCode,
-        signatureChecksum: metadata.signatureChecksum,
-        fileSize: formatFileSize(file.size),
-        fileName: file.name,
-      })
+      // Stage 2: Validate APK structure (client-side using JSZip)
+      setStatus({ stage: 'validating', progress: 25, message: 'Validating APK structure...' })
+      await parseApkMetadataClient(file) // Validates structure, returns placeholders
 
       // Stage 3: Upload to Convex storage
       setStatus({ stage: 'uploading', progress: 50, message: 'Uploading APK to storage...' })
@@ -111,13 +102,43 @@ export function DpcApkManager() {
 
       const { storageId } = await uploadResponse.json()
 
-      // Stage 4: Save metadata to database
-      setStatus({ stage: 'saving', progress: 75, message: 'Saving APK metadata...' })
+      // Stage 4: Extract metadata server-side (signature + package name)
+      setStatus({ stage: 'parsing', progress: 65, message: 'Extracting APK signature and metadata...' })
+
+      const extractResponse = await fetch('/api/apk/extract-signature', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storageId }),
+      })
+
+      if (!extractResponse.ok) {
+        const errorData = await extractResponse.json()
+        throw new Error(errorData.details || 'Failed to extract APK metadata')
+      }
+
+      const extractedMetadata = await extractResponse.json()
+
+      if (!extractedMetadata.success) {
+        throw new Error('Server-side extraction failed')
+      }
+
+      // Update apkInfo with extracted metadata
+      setApkInfo({
+        packageName: extractedMetadata.packageName,
+        versionName: extractedMetadata.versionName,
+        versionCode: extractedMetadata.versionCode,
+        signatureChecksum: extractedMetadata.signatureChecksum,
+        fileSize: formatFileSize(file.size),
+        fileName: file.name,
+      })
+
+      // Stage 5: Save metadata to database
+      setStatus({ stage: 'saving', progress: 85, message: 'Saving APK metadata...' })
       await saveApkMetadata({
-        version: metadata.versionName,
-        versionCode: metadata.versionCode,
+        version: extractedMetadata.versionName,
+        versionCode: extractedMetadata.versionCode,
         storageId,
-        signatureChecksum: metadata.signatureChecksum,
+        signatureChecksum: extractedMetadata.signatureChecksum,
         fileSize: file.size,
         fileName: file.name,
       })

@@ -1,0 +1,911 @@
+<h1
+id="multi-environment-development-workflow-setup-plan">Multi-Environment
+Development Workflow Setup Plan</h1>
+<p><strong>Created:</strong> 2025-11-09 <strong>Status:</strong>
+Planning <strong>Transition:</strong> Phase 1 (Production Only) → Phase
+2/3 (Local → Dev → Production)</p>
+<hr />
+<h2 id="overview">Overview</h2>
+<p>Transition from current “develop on production” workflow to a robust
+3-tier development workflow:</p>
+<ul>
+<li><strong>Local</strong>: Development on your machine (Next.js +
+Convex backend running locally, no internet required)</li>
+<li><strong>Cloud Dev</strong>: Staging environment (Vercel preview +
+Convex cloud dev deployment)</li>
+<li><strong>Cloud Production</strong>: Current production (Vercel +
+Convex cloud production)</li>
+</ul>
+<p><strong>Key Feature:</strong> True local development with Convex
+backend running on your machine (beta feature, stored in
+<code>~/.convex/</code>). Work completely offline after initial
+setup!</p>
+<hr />
+<h2 id="git-branch-strategy">1. Git Branch Strategy</h2>
+<h3 id="create-branch-structure">Create Branch Structure</h3>
+<pre><code>master (production)          ← Protected, deployed to production
+  ↑
+  PR + Review
+  ↑
+development                  ← Deployed to Vercel preview
+  ↑
+feature/* branches           ← Local development</code></pre>
+<h3 id="implementation">Implementation</h3>
+<ul>
+<li>Create <code>development</code> branch from current
+<code>master</code></li>
+<li>Configure GitHub branch protection for <code>master</code> (require
+PR, prevent direct push)</li>
+<li>Future workflow: feature branch → development → master</li>
+</ul>
+<hr />
+<h2 id="convex-multi-environment-setup">2. Convex Multi-Environment
+Setup</h2>
+<h3 id="current-state">Current State</h3>
+<ul>
+<li>Single Convex deployment:
+<code>https://kindly-mule-339.convex.cloud</code></li>
+<li>All development happens against production database</li>
+<li>Schema changes deployed directly to production</li>
+<li>You already have a Convex dev deployment in cloud</li>
+</ul>
+<h3 id="target-state">Target State</h3>
+<p>We’ll use three separate Convex environments:</p>
+<ul>
+<li><strong>Local</strong>: Convex backend running on your machine (true
+offline development, beta feature)</li>
+<li><strong>Development</strong>: Your existing cloud dev deployment
+(permanent, for Vercel preview testing)</li>
+<li><strong>Production</strong>: Keep existing
+<code>kindly-mule-339</code> (permanent, production deployment)</li>
+</ul>
+<p><strong>Local Development Options:</strong> 1.
+<strong><code>npx convex dev --local</code></strong> - Runs Convex
+backend on your machine (no internet needed after setup) 2.
+<strong>First-time <code>npx convex dev</code></strong> - Prompts:
+“develop locally without account” or “create cloud account” 3.
+<strong>Local state storage</strong>: <code>~/.convex/</code> directory
+4. <strong>Local dashboard</strong>: Included for debugging
+(localhost)</p>
+<p><strong>Note:</strong> Safari blocks localhost requests (use
+Chrome/Firefox). Brave blocks localhost by default (must enable).</p>
+<h3 id="configuration-files">Configuration Files</h3>
+<ul>
+<li><code>.env.local</code> - Local development (points to local Convex
+backend: <code>http://127.0.0.1:3210</code>)</li>
+<li><code>.env.development</code> - Cloud development (Vercel preview,
+points to your existing cloud dev deployment)</li>
+<li><code>.env.production</code> - Cloud production (points to
+<code>kindly-mule-339</code>)</li>
+</ul>
+<h3 id="schema-deployment-strategy">Schema Deployment Strategy</h3>
+<ul>
+<li><strong>Local changes</strong>: Test with
+<code>npx convex dev --local</code> (runs backend on your machine, no
+internet required)</li>
+<li><strong>Dev deployment</strong>:
+<code>npx convex deploy --prod &lt;your-dev-deployment-name&gt;</code>
+(push to cloud dev deployment)</li>
+<li><strong>Prod deployment</strong>:
+<code>npx convex deploy --prod</code> (existing workflow, pushes to
+production)</li>
+</ul>
+<h3 id="convex-dashboard-setup">Convex Dashboard Setup</h3>
+<p><strong>Note:</strong> You mentioned you already have a Convex dev
+deployment. If so, skip step 2 and use your existing deployment
+name.</p>
+<ol type="1">
+<li>Go to <a href="https://dashboard.convex.dev">Convex
+Dashboard</a></li>
+<li>(If needed) Create new deployment: <code>bbtec-mdm-dev</code> OR use
+your existing dev deployment</li>
+<li>Copy deployment URL (e.g.,
+<code>https://happy-bear-123.convex.cloud</code>)</li>
+<li>Run
+<code>npx convex deploy --prod &lt;your-dev-deployment-name&gt;</code>
+to initialize/sync schema</li>
+<li>(Optional) Copy data from production to dev for realistic
+testing</li>
+</ol>
+<hr />
+<h2 id="vercel-multi-environment-setup">3. Vercel Multi-Environment
+Setup</h2>
+<h3 id="deployment-configuration">Deployment Configuration</h3>
+<ul>
+<li><strong>Production Branch</strong>: <code>master</code> →
+<code>bbtec-mdm.vercel.app</code></li>
+<li><strong>Preview Branches</strong>: <code>development</code> and
+<code>feature/*</code> → unique preview URLs</li>
+<li>Configure environment variables per environment in Vercel
+dashboard</li>
+</ul>
+<h3 id="environment-variables-vercel-dashboard">Environment Variables
+(Vercel Dashboard)</h3>
+<p><strong>Production Environment (master branch):</strong> -
+<code>NEXT_PUBLIC_CONVEX_URL</code> →
+<code>https://kindly-mule-339.convex.cloud</code> -
+<code>CONVEX_DEPLOYMENT</code> → <code>prod:kindly-mule-339</code> -
+<code>CLERK_SECRET_KEY</code> → (production key) -
+<code>NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code> → (production key)</p>
+<p><strong>Preview Environment (development + feature
+branches):</strong> - <code>NEXT_PUBLIC_CONVEX_URL</code> →
+<code>https://[your-dev-deployment].convex.cloud</code> (your existing
+dev deployment) - <code>CONVEX_DEPLOYMENT</code> →
+<code>prod:[your-dev-deployment-name]</code> -
+<code>CLERK_SECRET_KEY</code> → (can share or create separate Clerk dev
+app) - <code>NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code> → (can share or
+separate)</p>
+<h3 id="vercel-configuration-steps">Vercel Configuration Steps</h3>
+<ol type="1">
+<li>Go to <a href="https://vercel.com/dashboard">Vercel
+Dashboard</a></li>
+<li>Select <code>bbtec-mdm</code> project</li>
+<li>Go to Settings → Git</li>
+<li>Set Production Branch: <code>master</code></li>
+<li>Go to Settings → Environment Variables</li>
+<li>Add variables for Production (master branch only)</li>
+<li>Add variables for Preview (all non-production branches)</li>
+<li>Save and redeploy</li>
+</ol>
+<hr />
+<h2 id="local-development-environment">4. Local Development
+Environment</h2>
+<h3 id="setup-components">Setup Components</h3>
+<ol type="1">
+<li><strong>Convex local backend</strong>
+(<code>npx convex dev --local</code> - runs on your machine, port 3210,
+NO internet required)</li>
+<li><strong>Next.js dev server</strong> (<code>npm run dev</code> - runs
+on port 3000)</li>
+<li><strong>Environment variables</strong> (<code>.env.local</code> -
+auto-configured by Convex)</li>
+<li><strong>Physical Android device</strong> (recommended) OR Android
+emulator (resource-intensive)</li>
+</ol>
+<p><strong>Note:</strong> Convex local backend (beta) runs completely on
+your machine. Database stored in <code>~/.convex/</code>. Local
+dashboard included.</p>
+<h3 id="new-files-to-create">New Files to Create</h3>
+<h4 id="env.local-local-development"><code>.env.local</code> (Local
+Development)</h4>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Convex (local backend running on your machine)</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="va">NEXT_PUBLIC_CONVEX_URL</span><span class="op">=</span>http://127.0.0.1:3210</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># OR if npx convex dev auto-configured it:</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co"># NEXT_PUBLIC_CONVEX_URL=http://localhost:3210</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Clerk (can reuse production or create dev app)</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="va">NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</span><span class="op">=</span>pk_test_...</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="va">CLERK_SECRET_KEY</span><span class="op">=</span>sk_test_...</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Next.js</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="va">NODE_ENV</span><span class="op">=</span>development</span></code></pre></div>
+<p><strong>Note:</strong> When you run
+<code>npx convex dev --local</code>, it will automatically create/update
+<code>.env.local</code> with the correct local Convex URL.</p>
+<h4
+id="env.development-cloud-dev---vercel-preview"><code>.env.development</code>
+(Cloud Dev - Vercel Preview)</h4>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Convex (dev deployment)</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="va">NEXT_PUBLIC_CONVEX_URL</span><span class="op">=</span>https://<span class="pp">[</span><span class="ss">your</span><span class="pp">-</span><span class="ss">dev</span><span class="pp">-</span><span class="ss">deployment</span><span class="pp">]</span>.convex.cloud</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="va">CONVEX_DEPLOYMENT</span><span class="op">=</span>prod:<span class="pp">[</span><span class="ss">your</span><span class="pp">-</span><span class="ss">dev</span><span class="pp">-</span><span class="ss">deployment</span><span class="pp">-</span><span class="ss">name</span><span class="pp">]</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Clerk</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="va">NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</span><span class="op">=</span>pk_test_...</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="va">CLERK_SECRET_KEY</span><span class="op">=</span>sk_test_...</span></code></pre></div>
+<h4 id="env.production-cloud-production"><code>.env.production</code>
+(Cloud Production)</h4>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Convex (production deployment)</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="va">NEXT_PUBLIC_CONVEX_URL</span><span class="op">=</span>https://kindly-mule-339.convex.cloud</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="va">CONVEX_DEPLOYMENT</span><span class="op">=</span>prod:kindly-mule-339</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Clerk</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="va">NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</span><span class="op">=</span>pk_test_...</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="va">CLERK_SECRET_KEY</span><span class="op">=</span>sk_test_...</span></code></pre></div>
+<h3 id="local-testing-flow">Local Testing Flow</h3>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Terminal 1: Start Convex local backend (TRUE local, no internet required!)</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npx</span> convex dev <span class="at">--local</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Runs Convex backend on your machine: http://127.0.0.1:3210</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Local database stored in ~/.convex/</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Local dashboard available in browser</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Terminal 2: Start Next.js dev server</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run dev</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Runs on http://localhost:3000</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Connects to local Convex backend</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Terminal 3: Test Android client on PHYSICAL device (recommended)</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Connect phone via USB, enable USB debugging</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android-client</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="ex">./gradlew</span> assembleDebug</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> reverse tcp:3000 tcp:3000  <span class="co"># Forward phone&#39;s port to laptop&#39;s localhost</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> install <span class="at">-r</span> app/build/outputs/apk/debug/app-debug.apk</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Phone can now access localhost:3000!</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Alternative: Test on Android emulator (resource-intensive, may not work on T480s)</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="co"># ./gradlew installDebug  # Will install to running emulator</span></span></code></pre></div>
+<h3 id="testing-workflow">Testing Workflow</h3>
+<ol type="1">
+<li>Start local Convex backend
+(<code>npx convex dev --local</code>)</li>
+<li>Edit code → See changes at <code>localhost:3000</code></li>
+<li>Test with local Convex backend (completely isolated from
+production)</li>
+<li>Test web UI in browser</li>
+<li>(Recommended) Test Android client on physical device via
+<code>adb reverse</code></li>
+</ol>
+<h3 id="benefits-of-true-local-development">Benefits of True Local
+Development</h3>
+<ul>
+<li>✅ <strong>No internet required</strong> (after initial setup)</li>
+<li>✅ <strong>Faster code sync</strong> (no network latency)</li>
+<li>✅ <strong>No quota limits</strong> (functions calls, database
+bandwidth)</li>
+<li>✅ <strong>Complete isolation</strong> from production and dev cloud
+deployments</li>
+<li>✅ <strong>Work offline</strong> (airplane, train, no WiFi)</li>
+<li>✅ <strong>Local debugging</strong> with dashboard</li>
+</ul>
+<hr />
+<h2 id="android-client-build-variants">5. Android Client Build
+Variants</h2>
+<h3 id="current-state-1">Current State</h3>
+<ul>
+<li>Single build configuration</li>
+<li>Hardcoded production URL:
+<code>https://bbtec-mdm.vercel.app/api/client</code></li>
+<li>One APK for all environments</li>
+</ul>
+<h3 id="target-state-1">Target State</h3>
+<p>Create 3 build variants with different server URLs:</p>
+<ul>
+<li><strong>debug</strong> →
+<code>http://localhost:3000/api/client</code> (for physical device
+testing with <code>adb reverse</code>)</li>
+<li><strong>staging</strong> → Vercel preview URL (development branch
+deployment)</li>
+<li><strong>production</strong> →
+<code>https://bbtec-mdm.vercel.app/api/client</code> (current)</li>
+</ul>
+<p><strong>Note:</strong> Physical device testing is recommended (lower
+resource usage on your Lenovo T480s). The debug flavor uses
+<code>localhost:3000</code> which works with physical devices via
+<code>adb reverse</code>. If you need emulator support, you can create a
+separate flavor with <code>http://10.0.2.2:3000/api/client</code>.</p>
+<h3 id="implementation-1">Implementation</h3>
+<h4 id="update-android-clientappbuild.gradle.kts">Update
+<code>android-client/app/build.gradle.kts</code></h4>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>android <span class="op">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    namespace <span class="op">=</span> <span class="st">&quot;com.bbtec.mdm.client&quot;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    compileSdk <span class="op">=</span> <span class="dv">34</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    defaultConfig <span class="op">{</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>        applicationId <span class="op">=</span> <span class="st">&quot;com.bbtec.mdm.client&quot;</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>        minSdk <span class="op">=</span> <span class="dv">29</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>        targetSdk <span class="op">=</span> <span class="dv">34</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>        versionCode <span class="op">=</span> <span class="dv">38</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>        versionName <span class="op">=</span> <span class="st">&quot;0.0.38&quot;</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ADD THIS: Product Flavors for different environments</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    flavorDimensions <span class="op">+=</span> <span class="st">&quot;environment&quot;</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    productFlavors <span class="op">{</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>        create<span class="op">(</span><span class="st">&quot;debug&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>            dimension <span class="op">=</span> <span class="st">&quot;environment&quot;</span></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>            applicationIdSuffix <span class="op">=</span> <span class="st">&quot;.debug&quot;</span></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>            versionNameSuffix <span class="op">=</span> <span class="st">&quot;-debug&quot;</span></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>            <span class="co">// localhost works with physical device via adb reverse</span></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>            buildConfigField<span class="op">(</span><span class="st">&quot;String&quot;</span><span class="op">,</span> <span class="st">&quot;BASE_URL&quot;</span><span class="op">,</span> <span class="st">&quot;</span><span class="sc">\&quot;</span><span class="st">http://localhost:3000/api/client</span><span class="sc">\&quot;</span><span class="st">&quot;</span><span class="op">)</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>        create<span class="op">(</span><span class="st">&quot;staging&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>            dimension <span class="op">=</span> <span class="st">&quot;environment&quot;</span></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>            applicationIdSuffix <span class="op">=</span> <span class="st">&quot;.staging&quot;</span></span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>            versionNameSuffix <span class="op">=</span> <span class="st">&quot;-staging&quot;</span></span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>            buildConfigField<span class="op">(</span><span class="st">&quot;String&quot;</span><span class="op">,</span> <span class="st">&quot;BASE_URL&quot;</span><span class="op">,</span> <span class="st">&quot;</span><span class="sc">\&quot;</span><span class="st">https://bbtec-mdm-git-development.vercel.app/api/client</span><span class="sc">\&quot;</span><span class="st">&quot;</span><span class="op">)</span></span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>        create<span class="op">(</span><span class="st">&quot;production&quot;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>            dimension <span class="op">=</span> <span class="st">&quot;environment&quot;</span></span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>            buildConfigField<span class="op">(</span><span class="st">&quot;String&quot;</span><span class="op">,</span> <span class="st">&quot;BASE_URL&quot;</span><span class="op">,</span> <span class="st">&quot;</span><span class="sc">\&quot;</span><span class="st">https://bbtec-mdm.vercel.app/api/client</span><span class="sc">\&quot;</span><span class="st">&quot;</span><span class="op">)</span></span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>    buildFeatures <span class="op">{</span></span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>        buildConfig <span class="op">=</span> <span class="kw">true</span>  <span class="co">// Enable BuildConfig generation</span></span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ... rest of existing config</span></span>
+<span id="cb6-40"><a href="#cb6-40" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h4
+id="update-android-clientappsrcmainjavacombbtecmdmclientapiclient.kt">Update
+<code>android-client/app/src/main/java/com/bbtec/mdm/client/ApiClient.kt</code></h4>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> ApiClient<span class="op">(</span><span class="kw">private</span> <span class="kw">val</span> <span class="va">context</span><span class="op">:</span> <span class="dt">Context</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// REPLACE hardcoded URL with BuildConfig</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="kw">val</span> <span class="va">baseUrl</span> <span class="op">=</span> BuildConfig<span class="op">.</span>BASE_URL</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ... rest of existing code</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="build-commands">Build Commands</h3>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Local testing on physical device (recommended)</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./gradlew</span> assembleDebug</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> reverse tcp:3000 tcp:3000  <span class="co"># Forward port first!</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> install <span class="at">-r</span> app/build/outputs/apk/debug/debug/app-debug-debug.apk</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Staging testing (points to Vercel preview)</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="ex">./gradlew</span> assembleStaging</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> install <span class="at">-r</span> app/build/outputs/apk/staging/debug/app-staging-debug.apk</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Production build (for direct APK distribution via your MDM system)</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="ex">./gradlew</span> assembleProductionRelease</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Output: app/build/outputs/apk/production/release/app-production-release.apk</span></span></code></pre></div>
+<h3 id="testing-with-physical-device-recommended">Testing with Physical
+Device (RECOMMENDED)</h3>
+<p><strong>Why physical device?</strong> - Lower resource usage on
+Lenovo T480s - Real-world testing conditions - No emulator performance
+overhead - Faster iteration cycle</p>
+<p><strong>Setup:</strong></p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Enable USB debugging on your Android device</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="co">#    Settings → About phone → Tap &quot;Build number&quot; 7 times</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="co">#    Settings → Developer options → Enable &quot;USB debugging&quot;</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Connect device via USB cable</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> devices  <span class="co"># Verify device detected</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. Forward localhost port to device (critical step!)</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> reverse tcp:3000 tcp:3000</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Now device can access localhost:3000 as if it&#39;s its own localhost</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. Build and install debug APK</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android-client</span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="ex">./gradlew</span> installDebug</span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a><span class="co"># Or manually: adb install -r app/build/outputs/apk/debug/debug/app-debug-debug.apk</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a><span class="co"># 5. Test app on device</span></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a><span class="co"># The app will connect to http://localhost:3000/api/client</span></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a><span class="co"># Which gets forwarded to your laptop&#39;s localhost:3000</span></span></code></pre></div>
+<h3 id="testing-with-android-emulator-alternative">Testing with Android
+Emulator (Alternative)</h3>
+<p><strong>Only if physical device not available. Resource-intensive on
+T480s.</strong></p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Start emulator (Android Studio or command line)</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="ex">emulator</span> <span class="at">-avd</span> Pixel_6_API_34</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Forward localhost port to emulator</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> reverse tcp:3000 tcp:3000</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. Install debug APK</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="ex">./gradlew</span> installDebug</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Note: With emulator, you can use either:</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="co"># - http://localhost:3000 (with adb reverse)</span></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a><span class="co"># - http://10.0.2.2:3000 (emulator&#39;s special IP for host)</span></span></code></pre></div>
+<hr />
+<h2 id="migration-steps-execution-order">6. Migration Steps (Execution
+Order)</h2>
+<h3 id="phase-a-git-setup-low-risk---10-minutes">Phase A: Git Setup (Low
+Risk - 10 minutes)</h3>
+<ol type="1">
+<li><p>✅ Create <code>development</code> branch from
+<code>master</code></p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> checkout master</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> pull</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> checkout <span class="at">-b</span> development</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> push <span class="at">-u</span> origin development</span></code></pre></div></li>
+<li><p>✅ Configure GitHub branch protection for <code>master</code></p>
+<ul>
+<li>Go to GitHub repo → Settings → Branches</li>
+<li>Add branch protection rule for <code>master</code></li>
+<li>Enable: “Require pull request before merging”</li>
+<li>Enable: “Require status checks to pass before merging”</li>
+<li>Save changes</li>
+</ul></li>
+<li><p>✅ Test: Try to push directly to master (should be
+blocked)</p></li>
+</ol>
+<h3 id="phase-b-convex-dev-deployment-medium-impact---30-minutes">Phase
+B: Convex Dev Deployment (Medium Impact - 30 minutes)</h3>
+<ol start="4" type="1">
+<li><p>✅ Create new Convex dev deployment</p>
+<ul>
+<li>Open <a href="https://dashboard.convex.dev">Convex
+Dashboard</a></li>
+<li>Click “New Deployment”</li>
+<li>Name: <code>bbtec-mdm-dev</code></li>
+<li>Copy deployment URL</li>
+</ul></li>
+<li><p>✅ Initialize dev deployment with schema</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="ex">npx</span> convex deploy <span class="at">--prod</span> bbtec-mdm-dev</span></code></pre></div></li>
+<li><p>⚠️ (Optional) Copy production data to dev</p>
+<ul>
+<li>Convex doesn’t have built-in data migration</li>
+<li>Options:
+<ul>
+<li>Start with empty dev database</li>
+<li>Manually create test data</li>
+<li>Write script to copy data via queries</li>
+</ul></li>
+</ul></li>
+</ol>
+<h3 id="phase-c-environment-variables-critical---45-minutes">Phase C:
+Environment Variables (Critical - 45 minutes)</h3>
+<ol start="7" type="1">
+<li><p>✅ Backup current environment files</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cp</span> .env.local .env.local.backup</span></code></pre></div></li>
+<li><p>✅ Create <code>.env.production</code></p>
+<ul>
+<li>Extract production values from current <code>.env.local</code></li>
+<li>Set <code>NEXT_PUBLIC_CONVEX_URL</code> to production Convex</li>
+<li>Include all production credentials</li>
+</ul></li>
+<li><p>✅ Create <code>.env.development</code></p>
+<ul>
+<li>Point to dev Convex deployment</li>
+<li>Optionally create separate Clerk dev app</li>
+</ul></li>
+<li><p>✅ Create new <code>.env.local</code> for local dev</p>
+<ul>
+<li>Will be auto-populated by <code>npx convex dev</code></li>
+<li>Or manually point to dev Convex deployment</li>
+</ul></li>
+<li><p>✅ Update <code>.gitignore</code> (verify <code>.env*</code>
+excluded)
+<code>bash     # Should already exist, but verify:     .env     .env.local     .env.*.local</code></p></li>
+<li><p>✅ Configure Vercel environment variables</p>
+<ul>
+<li>Go to Vercel Dashboard → bbtec-mdm → Settings → Environment
+Variables</li>
+<li>Add production variables (apply to Production only)</li>
+<li>Add preview variables (apply to Preview only)</li>
+<li>Delete any existing variables not scoped to specific
+environments</li>
+</ul></li>
+</ol>
+<h3
+id="phase-d-android-client-build-variants-optional---1-2-hours">Phase D:
+Android Client Build Variants (Optional - 1-2 hours)</h3>
+<ol start="13" type="1">
+<li><p>✅ Update <code>android-client/app/build.gradle.kts</code></p>
+<ul>
+<li>Add <code>flavorDimensions</code> and
+<code>productFlavors</code></li>
+<li>Enable <code>buildConfig</code> feature</li>
+<li>Test build: <code>./gradlew tasks</code> (verify new tasks
+exist)</li>
+</ul></li>
+<li><p>✅ Update <code>ApiClient.kt</code> to use
+<code>BuildConfig.BASE_URL</code></p>
+<ul>
+<li>Replace hardcoded URL</li>
+<li>Test compilation: <code>./gradlew compileDebugKotlin</code></li>
+</ul></li>
+<li><p>✅ Test debug build
+<code>bash     ./gradlew assembleDebug     adb reverse tcp:3000 tcp:3000     adb install -r app/build/outputs/apk/debug/debug/app-debug-debug.apk</code></p></li>
+<li><p>⚠️ Update APK artifacts workflow</p>
+<ul>
+<li>Production APKs should be built with
+<code>./gradlew assembleProductionRelease</code></li>
+<li>Update documentation in <code>artifacts/README.md</code></li>
+</ul></li>
+</ol>
+<h3 id="phase-e-documentation-testing-1-hour">Phase E: Documentation
+&amp; Testing (1 hour)</h3>
+<ol start="17" type="1">
+<li><p>✅ Update <code>planning/development-workflow.md</code></p>
+<ul>
+<li>Mark Phase 1 as “Archived”</li>
+<li>Document new multi-environment workflow</li>
+<li>Add troubleshooting section</li>
+</ul></li>
+<li><p>✅ Update <code>CLAUDE.md</code></p>
+<ul>
+<li>Add environment-specific instructions</li>
+<li>Document which env vars belong to which environment</li>
+<li>Add Convex deployment commands</li>
+</ul></li>
+<li><p>✅ Test full workflow (local → dev → production)</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Local test</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> checkout <span class="at">-b</span> feature/test-workflow</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run dev  <span class="co"># Terminal 1</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="ex">npx</span> convex dev  <span class="co"># Terminal 2</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Make a small change (e.g., add console.log)</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Verify change appears at localhost:3000</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Push to development</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> add .</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> commit <span class="at">-m</span> <span class="st">&quot;test: Verify multi-environment workflow&quot;</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> push <span class="at">-u</span> origin feature/test-workflow</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Create PR to development on GitHub</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Verify Vercel preview deployment created</span></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Test on preview URL</span></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a><span class="co"># Merge to development</span></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Verify development preview deployment updated</span></span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a><span class="co"># Create PR from development to master</span></span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Merge to production</span></span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Verify production deployment</span></span></code></pre></div></li>
+<li><p>✅ Create documentation commit
+<code>bash     git checkout development     git add planning/multi-environment-setup-plan.md     git add planning/development-workflow.md     git add CLAUDE.md     git commit -m "docs: Multi-environment development workflow setup"     git push</code></p></li>
+</ol>
+<hr />
+<h2 id="new-development-workflow">7. New Development Workflow</h2>
+<h3 id="daily-development-after-migration">Daily Development (After
+Migration)</h3>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Create feature branch from development</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> checkout development</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> pull</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> checkout <span class="at">-b</span> feature/new-feature</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Develop locally (completely offline!)</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="ex">npx</span> convex dev <span class="at">--local</span>         <span class="co"># Terminal 1: Convex backend (localhost:3210)</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run dev                    <span class="co"># Terminal 2: Next.js (localhost:3000)</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Make changes, test at localhost:3000</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Local Convex backend in ~/.convex/</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Test Android client (optional):</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a><span class="co">#   cd android-client</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a><span class="co">#   ./gradlew installDebug</span></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="co">#   adb reverse tcp:3000 tcp:3000</span></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. Commit and push to feature branch</span></span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> add .</span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> commit <span class="at">-m</span> <span class="st">&quot;feat: Add new feature&quot;</span></span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> push <span class="at">-u</span> origin feature/new-feature</span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. Create PR to development</span></span>
+<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a><span class="co"># - Go to GitHub</span></span>
+<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a><span class="co"># - Create PR: feature/new-feature → development</span></span>
+<span id="cb15-25"><a href="#cb15-25" aria-hidden="true" tabindex="-1"></a><span class="co"># - Vercel auto-creates preview deployment</span></span>
+<span id="cb15-26"><a href="#cb15-26" aria-hidden="true" tabindex="-1"></a><span class="co"># - Preview URL: bbtec-mdm-git-feature-new-feature.vercel.app</span></span>
+<span id="cb15-27"><a href="#cb15-27" aria-hidden="true" tabindex="-1"></a><span class="co"># - Test on preview URL</span></span>
+<span id="cb15-28"><a href="#cb15-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-29"><a href="#cb15-29" aria-hidden="true" tabindex="-1"></a><span class="co"># 5. Merge to development</span></span>
+<span id="cb15-30"><a href="#cb15-30" aria-hidden="true" tabindex="-1"></a><span class="co"># - Review code changes</span></span>
+<span id="cb15-31"><a href="#cb15-31" aria-hidden="true" tabindex="-1"></a><span class="co"># - Merge PR on GitHub</span></span>
+<span id="cb15-32"><a href="#cb15-32" aria-hidden="true" tabindex="-1"></a><span class="co"># - Vercel updates development preview deployment</span></span>
+<span id="cb15-33"><a href="#cb15-33" aria-hidden="true" tabindex="-1"></a><span class="co"># - Test on development deployment</span></span>
+<span id="cb15-34"><a href="#cb15-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-35"><a href="#cb15-35" aria-hidden="true" tabindex="-1"></a><span class="co"># 6. Promote to production (when ready)</span></span>
+<span id="cb15-36"><a href="#cb15-36" aria-hidden="true" tabindex="-1"></a><span class="co"># - Create PR: development → master</span></span>
+<span id="cb15-37"><a href="#cb15-37" aria-hidden="true" tabindex="-1"></a><span class="co"># - Final review</span></span>
+<span id="cb15-38"><a href="#cb15-38" aria-hidden="true" tabindex="-1"></a><span class="co"># - Merge to master</span></span>
+<span id="cb15-39"><a href="#cb15-39" aria-hidden="true" tabindex="-1"></a><span class="co"># - Auto-deploys to production (bbtec-mdm.vercel.app)</span></span>
+<span id="cb15-40"><a href="#cb15-40" aria-hidden="true" tabindex="-1"></a><span class="co"># - Monitor production deployment</span></span></code></pre></div>
+<h3 id="convex-schema-changes">Convex Schema Changes</h3>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Test locally (completely offline!)</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npx</span> convex dev <span class="at">--local</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Edit convex/schema.ts</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Convex local backend auto-syncs schema changes</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Test with Next.js dev server (localhost:3000)</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Local database in ~/.convex/</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Deploy to cloud dev</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="ex">npx</span> convex deploy <span class="at">--prod</span> <span class="op">&lt;</span>your-dev-deployment-name<span class="op">&gt;</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Push code changes to feature branch</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Vercel preview will use cloud dev Convex deployment</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. Deploy to production</span></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> checkout master</span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> pull</span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a><span class="ex">npx</span> convex deploy <span class="at">--prod</span></span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Schema changes now live in production</span></span></code></pre></div>
+<h3 id="android-client-releases">Android Client Releases</h3>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Development testing</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./gradlew</span> assembleDebug</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> install <span class="at">-r</span> app/build/outputs/apk/debug/debug/app-debug-debug.apk</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Staging testing (against Vercel preview)</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a><span class="ex">./gradlew</span> assembleStaging</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> install <span class="at">-r</span> app/build/outputs/apk/staging/debug/app-staging-debug.apk</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Production release (for direct APK distribution)</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="ex">./gradlew</span> assembleProductionRelease</span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a><span class="co"># APK is auto-signed using keystore configured in build.gradle.kts</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Distribute via your MDM system (upload to Convex APK storage)</span></span></code></pre></div>
+<hr />
+<h2 id="rollback-strategy">8. Rollback Strategy</h2>
+<h3 id="if-something-goes-wrong">If Something Goes Wrong</h3>
+<p><strong>Immediate Rollback:</strong> 1. Revert to previous commit on
+<code>master</code> 2. Vercel auto-deploys previous version 3. No data
+loss (Convex keeps all data)</p>
+<p><strong>Partial Rollback:</strong> - Keep current production setup
+untouched - Test new workflow on <code>development</code> branch only -
+Can continue current workflow on <code>master</code> while testing</p>
+<p><strong>Complete Rollback:</strong> - Delete <code>development</code>
+branch - Remove Vercel preview environment variables - Continue using
+Phase 1 workflow (direct to production)</p>
+<p><strong>Safety Nets:</strong> - ✅ Keep current
+<code>.env.local</code> backed up - ✅ Keep <code>master</code> branch
+untouched until full testing complete - ✅ Can run both workflows in
+parallel during transition - ✅ Zero risk to production during setup</p>
+<hr />
+<h2 id="key-decisions-needed">9. Key Decisions Needed</h2>
+<h3 id="before-starting-migration">Before Starting Migration</h3>
+<ol type="1">
+<li><strong>Convex Deployments</strong>
+<ul>
+<li><label><input type="checkbox" />Create new named deployments
+(<code>bbtec-mdm-prod</code>, <code>bbtec-mdm-dev</code>)?</label></li>
+<li><label><input type="checkbox" />Or keep current one as prod, create
+only dev?</label></li>
+<li><strong>Recommendation:</strong> Keep <code>kindly-mule-339</code>
+as prod, create new <code>bbtec-mdm-dev</code></li>
+</ul></li>
+<li><strong>Clerk Authentication</strong>
+<ul>
+<li><label><input type="checkbox" />Separate dev/prod Clerk
+applications?</label></li>
+<li><label><input type="checkbox" />Or share credentials across
+environments?</label></li>
+<li><strong>Recommendation:</strong> Share initially, separate later if
+needed</li>
+</ul></li>
+<li><strong>Android Client Build Variants</strong>
+<ul>
+<li><label><input type="checkbox" />Implement immediately?</label></li>
+<li><label><input type="checkbox" />Or defer until after backend
+environments working?</label></li>
+<li><strong>Recommendation:</strong> Defer to Phase 2 (focus on backend
+first)</li>
+</ul></li>
+<li><strong>Data Migration</strong>
+<ul>
+<li><label><input type="checkbox" />Copy production data to dev Convex
+deployment?</label></li>
+<li><label><input type="checkbox" />Start with empty dev
+database?</label></li>
+<li><strong>Recommendation:</strong> Start empty, create test data as
+needed</li>
+</ul></li>
+<li><strong>Branch Protection</strong>
+<ul>
+<li><label><input type="checkbox" />Require PR reviews for
+master?</label></li>
+<li><label><input type="checkbox" />Require status checks
+(CI/CD)?</label></li>
+<li><strong>Recommendation:</strong> Require PR, skip CI initially (add
+later)</li>
+</ul></li>
+</ol>
+<h3 id="during-migration">During Migration</h3>
+<ol start="6" type="1">
+<li><strong>Environment Variables</strong>
+<ul>
+<li><label><input type="checkbox" />Which env vars should differ between
+dev/prod?</label></li>
+<li><label><input type="checkbox" />Which can be shared?</label></li>
+<li><strong>Note:</strong> Mainly just Convex URLs and Clerk keys. No
+third-party service credentials needed.</li>
+</ul></li>
+<li><strong>Testing Strategy</strong>
+<ul class="task-list">
+<li><label><input type="checkbox" />How much testing before promoting to
+production?</label></li>
+<li><label><input type="checkbox" />What defines “ready for
+production”?</label></li>
+</ul></li>
+</ol>
+<hr />
+<h2 id="estimated-timeline">10. Estimated Timeline</h2>
+<h3 id="conservative-estimate">Conservative Estimate</h3>
+<ul>
+<li><strong>Phase A (Git Setup)</strong>: 10 minutes
+<ul>
+<li>Create branch</li>
+<li>Configure GitHub protection</li>
+</ul></li>
+<li><strong>Phase B (Convex Dev)</strong>: 30 minutes
+<ul>
+<li>Create deployment via dashboard</li>
+<li>Initialize schema</li>
+</ul></li>
+<li><strong>Phase C (Environment Variables)</strong>: 45 minutes
+<ul>
+<li>Create <code>.env.*</code> files</li>
+<li>Configure Vercel dashboard</li>
+</ul></li>
+<li><strong>Phase D (Android Variants)</strong>: 1-2 hours
+<em>(Optional, can defer)</em>
+<ul>
+<li>Update Gradle config</li>
+<li>Test builds</li>
+</ul></li>
+<li><strong>Phase E (Documentation/Testing)</strong>: 1 hour
+<ul>
+<li>Update docs</li>
+<li>End-to-end workflow test</li>
+</ul></li>
+</ul>
+<p><strong>Total</strong>: ~3-4 hours for full implementation
+<strong>Minimum</strong>: ~1-2 hours if deferring Android build
+variants</p>
+<h3 id="aggressive-estimate-minimal-viable-setup">Aggressive Estimate
+(Minimal Viable Setup)</h3>
+<ul>
+<li>Git branch: 5 min</li>
+<li>Convex dev deployment: 15 min</li>
+<li>Environment variables: 30 min</li>
+<li>Quick test: 10 min</li>
+</ul>
+<p><strong>Total</strong>: ~1 hour for basic setup</p>
+<hr />
+<h2 id="success-criteria">11. Success Criteria</h2>
+<h3 id="phase-complete-when">Phase Complete When:</h3>
+<p>✅ Can develop locally without affecting production ✅ Can test
+changes on Vercel preview deployments ✅ Can promote changes through
+development → master workflow ✅ Production remains stable and unchanged
+during migration ✅ Documentation updated and accurate ✅ Team (you)
+comfortable with new workflow</p>
+<h3 id="validation-tests">Validation Tests:</h3>
+<ol type="1">
+<li><strong>Local Development Test</strong>
+<ul>
+<li>Start <code>npm run dev</code> and <code>npx convex dev</code></li>
+<li>Make a change, see it at <code>localhost:3000</code></li>
+<li>Verify separate database from production</li>
+</ul></li>
+<li><strong>Development Deployment Test</strong>
+<ul>
+<li>Push to <code>development</code> branch</li>
+<li>Verify Vercel preview created</li>
+<li>Test on preview URL</li>
+<li>Verify uses dev Convex deployment</li>
+</ul></li>
+<li><strong>Production Deployment Test</strong>
+<ul>
+<li>Merge <code>development</code> → <code>master</code></li>
+<li>Verify production deployment</li>
+<li>Verify no downtime</li>
+<li>Verify production Convex unchanged</li>
+</ul></li>
+<li><strong>Android Client Test</strong> <em>(if implementing build
+variants)</em>
+<ul>
+<li>Build debug APK</li>
+<li>Install on device/emulator</li>
+<li>Test connection to localhost via <code>adb reverse</code></li>
+</ul></li>
+</ol>
+<hr />
+<h2 id="benefits-after-migration">12. Benefits After Migration</h2>
+<h3 id="immediate-benefits">Immediate Benefits</h3>
+<p>✅ <strong>True offline development</strong> - Convex backend runs on
+your machine, work without internet ✅ <strong>Safe testing</strong> -
+Changes don’t affect production ✅ <strong>Isolated
+environments</strong> - Local/dev/prod databases completely separate ✅
+<strong>No quota limits</strong> - Local development doesn’t count
+against Convex plan limits ✅ <strong>Faster iteration</strong> - No
+network latency for database/function calls ✅ <strong>Preview
+deployments</strong> - Test on Vercel before merging ✅ <strong>Git
+workflow</strong> - Professional PR-based development</p>
+<h3 id="long-term-benefits">Long-term Benefits</h3>
+<p>✅ <strong>Parallel development</strong> - Work on multiple features
+simultaneously ✅ <strong>Database schema safety</strong> - Test
+migrations before production ✅ <strong>Android client testing</strong>
+- Test against dev backend ✅ <strong>Easier debugging</strong> - Local
+environment for troubleshooting ✅ <strong>Onboarding ready</strong> -
+Can add collaborators without risk ✅ <strong>Professional
+workflow</strong> - Industry-standard practices</p>
+<h3 id="risk-reduction">Risk Reduction</h3>
+<p>✅ <strong>No accidental production changes</strong> ✅ <strong>PR
+reviews catch issues early</strong> ✅ <strong>Rollback capability via
+Git</strong> ✅ <strong>Testing before deployment</strong></p>
+<hr />
+<h2 id="troubleshooting-guide">13. Troubleshooting Guide</h2>
+<h3 id="common-issues">Common Issues</h3>
+<p><strong>Issue: Vercel preview not using correct Convex
+deployment</strong> - Solution: Check environment variables in Vercel
+dashboard - Verify <code>NEXT_PUBLIC_CONVEX_URL</code> set for Preview
+environment</p>
+<p><strong>Issue: Local Convex backend not starting</strong> - Solution:
+Run <code>npx convex dev --local --once</code> to reinitialize - Check
+<code>.env.local</code> has correct <code>NEXT_PUBLIC_CONVEX_URL</code>
+(should be <code>http://127.0.0.1:3210</code>) - Clear local state:
+<code>rm -rf ~/.convex/</code> and restart</p>
+<p><strong>Issue: Local Convex dashboard not working</strong> -
+<strong>Safari</strong>: Blocks localhost requests by default - use
+Chrome or Firefox instead - <strong>Brave</strong>: Blocks localhost by
+default - enable localhost in Brave settings -
+<strong>Chrome/Firefox</strong>: Should work without issues</p>
+<p><strong>Issue: Android client can’t connect to localhost</strong> -
+Solution: Run <code>adb reverse tcp:3000 tcp:3000</code> - Verify device
+is connected: <code>adb devices</code> - Test connection:
+<code>adb shell curl http://localhost:3000</code> - Physical device: Use
+<code>localhost:3000</code> with <code>adb reverse</code> - Emulator:
+Can use <code>localhost:3000</code> (with adb reverse) OR
+<code>10.0.2.2:3000</code> (emulator special IP)</p>
+<p><strong>Issue: Branch protection blocking pushes</strong> - Solution:
+This is expected! Create PR instead - Or temporarily disable protection
+for testing</p>
+<p><strong>Issue: Convex schema out of sync</strong> - Solution: Run
+<code>npx convex deploy --prod [deployment-name]</code> - Verify
+schema.ts matches deployment</p>
+<h3 id="emergency-procedures">Emergency Procedures</h3>
+<p><strong>If production breaks:</strong> 1. Revert last commit on
+<code>master</code> 2. Push to trigger Vercel redeploy 3. Verify
+production restored 4. Debug on <code>development</code> branch</p>
+<p><strong>If development environment broken:</strong> - Safe to
+experiment - production unaffected - Can delete and recreate dev Convex
+deployment - Can reset <code>development</code> branch to
+<code>master</code></p>
+<hr />
+<h2 id="next-steps-after-migration">14. Next Steps After Migration</h2>
+<h3 id="phase-2-enhancements">Phase 2 Enhancements</h3>
+<ol type="1">
+<li><strong>CI/CD Pipeline</strong>
+<ul>
+<li>Add GitHub Actions</li>
+<li>Auto-run tests on PR</li>
+<li>Auto-deploy APKs to artifacts/</li>
+</ul></li>
+<li><strong>Monitoring &amp; Logging</strong>
+<ul>
+<li>Add error tracking (Sentry)</li>
+<li>Add analytics (Vercel Analytics)</li>
+<li>Add Convex monitoring</li>
+</ul></li>
+<li><strong>Advanced Android Testing</strong>
+<ul>
+<li>Staging flavor with production-like data</li>
+<li>Beta testing with select devices (via direct APK distribution)</li>
+<li>Automated UI tests</li>
+</ul></li>
+<li><strong>Database Management</strong>
+<ul>
+<li>Convex migrations scripts</li>
+<li>Data seeding for dev environment</li>
+<li>Backup/restore procedures</li>
+</ul></li>
+</ol>
+<h3 id="phase-3---scaling-considerations">Phase 3 - Scaling
+Considerations</h3>
+<ul>
+<li>Multiple developers workflow</li>
+<li>Code review requirements</li>
+<li>Release management process</li>
+<li>Automated APK builds and distribution (GitHub Actions → Convex
+storage)</li>
+</ul>
+<hr />
+<h2 id="references">15. References</h2>
+<h3 id="documentation-links">Documentation Links</h3>
+<ul>
+<li><a
+href="https://vercel.com/docs/concepts/projects/environment-variables">Vercel
+Environment Variables</a></li>
+<li><a
+href="https://docs.convex.dev/production/hosting/deploy-options">Convex
+Multi-Deployment</a></li>
+<li><a href="https://developer.android.com/build/build-variants">Android
+Build Variants</a></li>
+<li><a
+href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches">GitHub
+Branch Protection</a></li>
+</ul>
+<h3 id="internal-documentation">Internal Documentation</h3>
+<ul>
+<li><code>planning/development-workflow.md</code> - Current workflow
+documentation</li>
+<li><code>CLAUDE.md</code> - Project context and conventions</li>
+<li><code>android-client/README.md</code> - Android client
+documentation</li>
+</ul>
+<hr />
+<p><strong>Last Updated:</strong> 2025-11-09 <strong>Next
+Review:</strong> After successful migration and 2 weeks of usage
+<strong>Owner:</strong> Ben (solo developer)</p>

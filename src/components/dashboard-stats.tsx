@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { listDevices } from "@/app/actions/android-management"
+import { listDevices } from "@/app/actions/enrollment"
 import { Smartphone, QrCode, Shield, TrendingUp } from "lucide-react"
 
 export function DashboardStats() {
