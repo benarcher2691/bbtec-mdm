@@ -63,6 +63,22 @@ export async function createEnrollmentQRCode(
       version?: string
     }
 
+    // Create enrollment token FIRST (needed for APK URL)
+    const tokenId = await convex.mutation(api.enrollmentTokens.createEnrollmentToken, {
+      policyId,
+      expiresInSeconds: duration,
+      companyUserId,
+    })
+
+    const token = await convex.query(api.enrollmentTokens.getToken, { tokenId })
+
+    if (!token) {
+      return {
+        success: false,
+        error: 'Failed to create enrollment token',
+      }
+    }
+
     if (dpcType === 'testdpc') {
       // Google Test DPC for comparison testing
       // Hardcoded values (upload code has signature extraction bug)
@@ -70,7 +86,7 @@ export async function createEnrollmentQRCode(
       dpcConfig = {
         componentName: 'com.afwsamples.testdpc/com.afwsamples.testdpc.DeviceAdminReceiver',
         packageName: 'com.afwsamples.testdpc',
-        apkUrl: `${serverUrl}/api/apps/${testdpcStorageId}`,
+        apkUrl: `${serverUrl}/api/apps/${testdpcStorageId}?token=${token.token}`,
         signatureChecksum: 'gJD2YwtOiWJHkSMkkIfLRlj-quNqG1fb6v100QmzM9w', // Correct TestDPC signature
         version: '9.0.12 (TestDPC)',
       }
@@ -115,7 +131,7 @@ export async function createEnrollmentQRCode(
       dpcConfig = {
         componentName,
         packageName,
-        apkUrl: `${serverUrl}/api/apps/${currentApk.storageId}`,
+        apkUrl: `${serverUrl}/api/apps/${currentApk.storageId}?token=${token.token}`,
         signatureChecksum: currentApk.signatureChecksum,
         version: currentApk.version,
       }
@@ -126,22 +142,6 @@ export async function createEnrollmentQRCode(
       console.log('[QR GEN] Component name:', componentName)
       console.log('[QR GEN] APK URL (redirect):', dpcConfig.apkUrl)
       console.log('[QR GEN] Storage ID:', currentApk.storageId)
-    }
-
-    // Create enrollment token
-    const tokenId = await convex.mutation(api.enrollmentTokens.createEnrollmentToken, {
-      policyId,
-      expiresInSeconds: duration,
-      companyUserId,
-    })
-
-    const token = await convex.query(api.enrollmentTokens.getToken, { tokenId })
-
-    if (!token) {
-      return {
-        success: false,
-        error: 'Failed to create enrollment token',
-      }
     }
 
     // Build Android provisioning JSON (custom DPC format)

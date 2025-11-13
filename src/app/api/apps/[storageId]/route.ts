@@ -26,6 +26,49 @@ export async function GET(
       referer: request.headers.get('referer'),
     })
 
+    // SECURITY: Validate enrollment token
+    const { searchParams } = new URL(request.url)
+    const enrollmentToken = searchParams.get('token')
+
+    if (!enrollmentToken) {
+      console.error(`[APK DOWNLOAD] ${storageId} - ERROR: No enrollment token provided`)
+      return NextResponse.json(
+        { error: 'Enrollment token required. APK downloads must include a valid enrollment token.' },
+        { status: 401 }
+      )
+    }
+
+    console.log(`[APK DOWNLOAD] ${storageId} - Validating enrollment token: ${enrollmentToken.substring(0, 8)}...`)
+
+    // Validate enrollment token (but don't mark as used - that happens during device registration)
+    const tokenData = await convex.query(api.enrollmentTokens.getByToken, {
+      token: enrollmentToken,
+    })
+
+    if (!tokenData) {
+      console.error(`[APK DOWNLOAD] ${storageId} - ERROR: Token not found`)
+      return NextResponse.json(
+        { error: 'Invalid enrollment token' },
+        { status: 401 }
+      )
+    }
+
+    if (tokenData.used) {
+      console.warn(`[APK DOWNLOAD] ${storageId} - WARNING: Token already used (allowing APK download for re-provisioning)`)
+      // Note: We allow downloads even if token is used, to support re-provisioning scenarios
+      // The device registration will fail if the token is already used, which is the real security check
+    }
+
+    if (tokenData.expiresAt < Date.now()) {
+      console.error(`[APK DOWNLOAD] ${storageId} - ERROR: Token expired at ${new Date(tokenData.expiresAt).toISOString()}`)
+      return NextResponse.json(
+        { error: 'Enrollment token expired' },
+        { status: 401 }
+      )
+    }
+
+    console.log(`[APK DOWNLOAD] ${storageId} - Token validation passed`)
+
     // Try DPC APK first (apkStorage), then fall back to applications
     console.log(`[APK DOWNLOAD] ${storageId} - Querying apkStorage table...`)
     let downloadUrl = await convex.query(api.apkStorage.getApkDownloadUrl, {

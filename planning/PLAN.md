@@ -135,10 +135,10 @@
 - [x] ✅ Removed insecure fallback registration (`/api/client/register`) - 2025-11-13
 - [x] ✅ All devices now require QR code enrollment token (proper MDM flow) - 2025-11-13
 - [x] ✅ Android client updated to enforce enrollment-only registration (v0.0.43)
+- [x] ✅ APK downloads now require valid enrollment token (`/api/apps/[storageId]`) - 2025-11-13
 
 **Optional Future Enhancements:**
 - [ ] Add rate limiting on DPC registration endpoint (prevent token brute force)
-- [ ] Review APK download security (public access vs. device auth)
 - [ ] Add audit logging for admin actions (who did what when)
 
 **Current Security Posture:** ✅ Production-Ready
@@ -146,6 +146,7 @@
 - Device token authentication working correctly
 - No publicly exposed sensitive endpoints
 - All device registrations require valid enrollment tokens
+- APK downloads require valid enrollment tokens (prevents unauthorized access)
 - Proper user/policy assignment enforced at enrollment
 
 ---
