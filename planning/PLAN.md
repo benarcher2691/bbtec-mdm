@@ -47,7 +47,32 @@
 
 ---
 
-### Priority 1: Build New Local App 📱
+### Priority 1: Investigate Missing Ping 🔍
+**Status:** ACTIVE (2025-11-14)
+**Expected Time:** 1-2 hours
+
+**Issue:**
+Device heartbeat/ping appears to be missing or not showing up in dashboard after enrollment.
+
+**Investigation Steps:**
+- [ ] Check device logs on Android client for heartbeat service
+- [ ] Verify heartbeat API endpoint receiving requests
+- [ ] Check Convex database for heartbeat records
+- [ ] Review network connectivity between device and server
+- [ ] Verify enrollment token and device registration succeeded
+- [ ] Check if PollingService is running in foreground
+- [ ] Review WorkManager backup job status
+
+**Files to Check:**
+- `android-client/app/src/main/java/com/bbtec/mdm/client/PollingService.kt`
+- `convex/deviceClients.ts` (heartbeat update logic)
+- Device logs: `adb logcat -s PollingService:* ApiClient:*`
+
+**Why Important:** Core functionality - devices must report heartbeat for monitoring
+
+---
+
+### Priority 2: Build New Local App 📱
 **Status:** READY TO BUILD
 **Expected Time:** 10 minutes
 
@@ -72,7 +97,7 @@ adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
 
 ---
 
-### Priority 2: Policy Enforcement 🔐
+### Priority 3: Policy Enforcement 🔐
 **Status:** NOT STARTED (PolicyManager.kt exists but has placeholder logic)
 **Expected Time:** 3-4 days
 
@@ -97,7 +122,7 @@ adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
 
 ---
 
-### Priority 3: Enhanced Device Info 📊
+### Priority 4: Enhanced Device Info 📊
 **Status:** NOT STARTED
 **Expected Time:** 2-3 days
 
@@ -124,7 +149,7 @@ adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
 
 ---
 
-### Priority 4: Field Test Heartbeat Resilience ⏱️
+### Priority 5: Field Test Heartbeat Resilience ⏱️
 **Status:** AWAITING FIELD TEST (v0.0.38 features included in v0.0.41)
 **Expected Time:** 1-2 days (observation period)
 
@@ -146,7 +171,7 @@ adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
 
 ---
 
-### Priority 5: Security Improvements 🔒
+### Priority 6: Security Improvements 🔒
 **Status:** ✅ MAJOR IMPROVEMENTS COMPLETE (2025-11-13)
 
 **Completed Security Enhancements:**
