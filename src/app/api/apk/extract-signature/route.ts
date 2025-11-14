@@ -5,6 +5,7 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { exec } from 'child_process'
 import { promisify } from 'util'
+import AppInfoParser from 'app-info-parser'
 
 const execPromise = promisify(exec)
 
@@ -124,11 +125,11 @@ export async function POST(request: NextRequest) {
       })
 
     } catch (extractionError) {
-      // Fallback: Use environment-aware hardcoded signatures (Vercel - no Android SDK)
-      console.log('[APK-EXTRACT] ⚠️ Extraction tools unavailable, using environment defaults')
+      // Fallback: Use environment-aware hardcoded signatures + app-info-parser for metadata
+      console.log('[APK-EXTRACT] ⚠️ Android SDK tools unavailable, using fallback methods')
       console.log('[APK-EXTRACT] Extraction error:', extractionError instanceof Error ? extractionError.message : 'Unknown')
 
-      // Detect environment
+      // Detect environment for signature
       const vercelEnv = process.env.VERCEL_ENV // 'production' | 'preview' | 'development' | undefined
       const isProduction = vercelEnv === 'production'
       const isPreview = vercelEnv === 'preview'
@@ -141,35 +142,68 @@ export async function POST(request: NextRequest) {
         ? 'U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE'  // Production keystore
         : 'iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk'  // Debug keystore
 
-      // Package name: Default to base package
-      // (In practice, staging uses .staging suffix, but base package works for provisioning)
-      const packageName = 'com.bbtec.mdm.client'
-
-      // Try to extract version from temp file name or use placeholder
-      const versionName = '0.0.39'  // Placeholder - not critical for provisioning
-      const versionCode = 39        // Placeholder - not critical for provisioning
-
       console.log('[APK-EXTRACT] Using signature:', signatureChecksum)
-      console.log('[APK-EXTRACT] Using package:', packageName)
 
-      // Clean up temp file
-      if (tempFilePath) {
-        try {
-          await unlink(tempFilePath)
-          tempFilePath = null
-        } catch (cleanupError) {
-          console.error('[APK-EXTRACT] Failed to clean up temp file:', cleanupError)
+      // Parse APK metadata using app-info-parser (works without Android SDK)
+      try {
+        if (!tempFilePath) {
+          throw new Error('Temp file path is null')
         }
-      }
 
-      return NextResponse.json({
-        success: true,
-        signatureChecksum,
-        packageName,
-        versionName,
-        versionCode,
-        fallback: true, // Indicate this used fallback logic
-      })
+        console.log('[APK-EXTRACT] Parsing APK metadata with app-info-parser...')
+        const parser = new AppInfoParser(tempFilePath)
+        const apkInfo = await parser.parse()
+
+        const packageName = apkInfo.package || 'com.bbtec.mdm.client'
+        const versionName = apkInfo.versionName || 'unknown'
+        const versionCode = apkInfo.versionCode || 0
+
+        console.log('[APK-EXTRACT] ✅ Parsed metadata:')
+        console.log('[APK-EXTRACT] Package:', packageName)
+        console.log('[APK-EXTRACT] Version:', versionName, `(${versionCode})`)
+
+        // Clean up temp file
+        await unlink(tempFilePath)
+        tempFilePath = null
+
+        return NextResponse.json({
+          success: true,
+          signatureChecksum,
+          packageName,
+          versionName,
+          versionCode,
+          fallback: true, // Indicate this used fallback logic
+        })
+
+      } catch (parserError) {
+        // Last resort: Use hardcoded defaults
+        console.error('[APK-EXTRACT] ⚠️ app-info-parser failed:', parserError instanceof Error ? parserError.message : 'Unknown')
+        console.error('[APK-EXTRACT] Using hardcoded defaults as last resort')
+
+        const packageName = 'com.bbtec.mdm.client'
+        const versionName = '0.0.39'  // Last resort placeholder
+        const versionCode = 39        // Last resort placeholder
+
+        // Clean up temp file
+        if (tempFilePath) {
+          try {
+            await unlink(tempFilePath)
+            tempFilePath = null
+          } catch (cleanupError) {
+            console.error('[APK-EXTRACT] Failed to clean up temp file:', cleanupError)
+          }
+        }
+
+        return NextResponse.json({
+          success: true,
+          signatureChecksum,
+          packageName,
+          versionName,
+          versionCode,
+          fallback: true,
+          lastResort: true, // Double fallback
+        })
+      }
     }
   } catch (error) {
     console.error('[APK-EXTRACT] Error:', error)
