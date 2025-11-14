@@ -1,13 +1,38 @@
 # Development Plan
 
 **Branch:** `feature/offline-local-dev`
-**Web Version:** 0.0.4
-**Android Version:** 0.0.43
+**Web Version:** 0.0.5
+**Android Version:** 0.0.43 (0.0.44 unreleased - heartbeat reliability fixes)
 **Last Updated:** 2025-11-14
 
 ---
 
 ## Current Priorities
+
+### Priority 0: Build New Local App 📱
+**Status:** READY TO BUILD
+**Expected Time:** 10 minutes
+
+**What's Needed:**
+- [ ] Build new `localDebug` APK with heartbeat reliability fixes (v0.0.44)
+- [ ] Test fixes confirmed working (2025-11-14):
+  - ✅ Try-catch-finally in polling loop prevents silent crashes
+  - ✅ Service automatically recovers from network errors
+  - ✅ 1-minute heartbeat interval working perfectly
+  - ✅ Watchdog confirms consistent success
+- [ ] Deploy to test device via `adb install -r`
+- [ ] Optional: Verify long-term stability (24-hour test)
+
+**Why Important:** Critical reliability fixes for heartbeat zombie state issue
+
+**Build Command:**
+```bash
+cd android-client
+./gradlew clean assembleLocalDebug
+adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
+```
+
+---
 
 ### Priority 1: Policy Enforcement 🔐
 **Status:** NOT STARTED (PolicyManager.kt exists but has placeholder logic)
