@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ConvexHttpClient } from 'convex/browser'
-import { api } from '../../../../../convex/_generated/api'
 import { auth } from '@clerk/nextjs/server'
 import { writeFile, unlink } from 'fs/promises'
 import { join } from 'path'
@@ -12,7 +10,7 @@ const execPromise = promisify(exec)
 
 /**
  * Extract APK Signature Server-Side
- * Downloads APK from Convex storage and calculates correct signature using apksigner
+ * Downloads APK from Vercel Blob and calculates correct signature using apksigner
  *
  * This replaces the client-side parser which couldn't properly extract certificate data
  */
@@ -20,30 +18,23 @@ export async function POST(request: NextRequest) {
   let tempFilePath: string | null = null
 
   try {
-    const { getToken } = await auth()
-    const token = await getToken({ template: 'convex' })
-
-    const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
-    convex.setAuth(token || '')
-
-    const { storageId } = await request.json()
-
-    if (!storageId) {
+    const { userId } = await auth()
+    if (!userId) {
       return NextResponse.json(
-        { error: 'Missing storageId' },
-        { status: 400 }
+        { error: 'Unauthorized' },
+        { status: 401 }
       )
     }
 
-    // Get download URL
-    const downloadUrl = await convex.query(api.apkStorage.getApkDownloadUrl, {
-      storageId,
-    })
+    const { blobUrl, storageId } = await request.json()
+
+    // Support both blobUrl (new) and storageId (legacy)
+    const downloadUrl = blobUrl || storageId
 
     if (!downloadUrl) {
       return NextResponse.json(
-        { error: 'Failed to get APK download URL' },
-        { status: 500 }
+        { error: 'Missing blobUrl or storageId' },
+        { status: 400 }
       )
     }
 

@@ -188,7 +188,8 @@ export default defineSchema({
   apkMetadata: defineTable({
     version: v.string(),               // "1.0.0"
     versionCode: v.number(),           // 1, 2, 3...
-    storageId: v.id("_storage"),       // Convex storage ID
+    blobUrl: v.string(),               // Vercel Blob URL (replaces Convex storage)
+    variant: v.union(v.literal("local"), v.literal("staging"), v.literal("production")), // APK build variant
     fileName: v.string(),              // "bbtec-mdm-client-1.0.0.apk"
     fileSize: v.number(),              // bytes
 
@@ -196,9 +197,11 @@ export default defineSchema({
     uploadedBy: v.string(),            // userId
     uploadedAt: v.number(),
 
-    isCurrent: v.boolean(),            // Mark as current version for QR codes
+    isCurrent: v.boolean(),            // Mark as current version for QR codes (per variant)
     downloadCount: v.number(),         // Track downloads
-  }).index("by_current", ["isCurrent"]),
+  }).index("by_current", ["isCurrent"])
+    .index("by_variant", ["variant"])
+    .index("by_variant_current", ["variant", "isCurrent"]),
 
   // NEW: Device commands (lock, wipe, reboot, etc.)
   deviceCommands: defineTable({

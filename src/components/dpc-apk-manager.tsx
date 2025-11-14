@@ -26,6 +26,7 @@ import {
   Download
 } from 'lucide-react'
 import { parseApkMetadataClient, validateApkFile } from '@/lib/apk-signature-client'
+import { upload } from '@vercel/blob/client'
 import type { Id } from '../../convex/_generated/dataModel'
 
 interface UploadStatus {
@@ -42,12 +43,22 @@ export function DpcApkManager() {
   })
   const [isDragging, setIsDragging] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [apkToDelete, setApkToDelete] = useState<{ id: Id<"apkMetadata">; version: string } | null>(null)
+  const [apkToDelete, setApkToDelete] = useState<{ id: Id<"apkMetadata">; version: string; blobUrl: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Convex queries and mutations
-  const currentApk = useQuery(api.apkStorage.getCurrentApk)
-  const generateUploadUrl = useMutation(api.apkStorage.generateUploadUrl)
+  // Detect current environment to determine variant
+  const isLocal = process.env.NEXT_PUBLIC_CONVEX_URL?.includes('127.0.0.1')
+  const isPreview = process.env.NEXT_PUBLIC_VERCEL_ENV === 'preview'
+
+  const currentVariant: 'local' | 'staging' | 'production' =
+    isLocal ? 'local' :
+    isPreview ? 'staging' :
+    'production'
+
+  console.log('[DPC APK Manager] Environment:', { isLocal, isPreview, currentVariant })
+
+  // Get current APK for THIS environment only
+  const currentApk = useQuery(api.apkStorage.getCurrentApkByVariant, { variant: currentVariant })
   const saveApkMetadata = useMutation(api.apkStorage.saveApkMetadata)
   const deleteApk = useMutation(api.apkStorage.deleteApk)
 
@@ -73,21 +84,15 @@ export function DpcApkManager() {
       setStatus({ stage: 'validating', progress: 25, message: 'Validating APK structure...' })
       await parseApkMetadataClient(file) // Validates structure, returns placeholders
 
-      // Stage 3: Upload to Convex storage
-      setStatus({ stage: 'uploading', progress: 50, message: 'Uploading APK to storage...' })
-      const uploadUrl = await generateUploadUrl()
+      // Stage 3: Upload to Vercel Blob
+      setStatus({ stage: 'uploading', progress: 50, message: 'Uploading APK to Vercel Blob...' })
 
-      const uploadResponse = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: file,
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/blobs/upload',
       })
 
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to upload APK to storage')
-      }
-
-      const { storageId } = await uploadResponse.json()
+      console.log('[DPC APK UPLOAD] Uploaded to Vercel Blob:', blob.url)
 
       // Stage 4: Extract metadata server-side (signature + package name)
       setStatus({ stage: 'parsing', progress: 65, message: 'Extracting APK signature and metadata...' })
@@ -95,7 +100,7 @@ export function DpcApkManager() {
       const extractResponse = await fetch('/api/apk/extract-signature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storageId }),
+        body: JSON.stringify({ blobUrl: blob.url }),
       })
 
       if (!extractResponse.ok) {
@@ -109,28 +114,47 @@ export function DpcApkManager() {
         throw new Error('Server-side extraction failed')
       }
 
-      // Stage 5: Save metadata to database
-      setStatus({ stage: 'saving', progress: 85, message: 'Saving APK metadata...' })
+      // Use current ENVIRONMENT as variant (NOT package name!)
+      const variant = currentVariant
+      console.log('[DPC APK] Using environment variant:', variant, '| APK package:', extractedMetadata.packageName)
+
+      // Stage 5: Delete old APK of SAME environment if exists
+      if (currentApk) {
+        setStatus({ stage: 'saving', progress: 85, message: `Removing old ${variant} APK...` })
+        console.log('[DPC APK] Deleting old', variant, 'APK:', currentApk.version)
+
+        // Delete blob from Vercel
+        try {
+          await fetch('/api/blobs/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ blobUrl: currentApk.blobUrl }),
+          })
+        } catch (err) {
+          console.warn('[DPC APK] Failed to delete old blob:', err)
+        }
+
+        // Delete metadata from Convex
+        await deleteApk({ apkId: currentApk._id, blobUrl: currentApk.blobUrl })
+      }
+
+      // Stage 6: Save NEW metadata to database
+      setStatus({ stage: 'saving', progress: 90, message: `Saving ${variant} APK metadata...` })
       await saveApkMetadata({
         version: extractedMetadata.versionName,
         versionCode: extractedMetadata.versionCode,
-        storageId,
+        blobUrl: blob.url,
+        variant: variant,
         signatureChecksum: extractedMetadata.signatureChecksum,
         fileSize: file.size,
         fileName: file.name,
       })
 
-      // Stage 6: Delete old APK if exists
-      if (currentApk) {
-        setStatus({ stage: 'saving', progress: 95, message: 'Removing old APK version...' })
-        await deleteApk({ apkId: currentApk._id })
-      }
-
       // Success!
       setStatus({
         stage: 'success',
         progress: 100,
-        message: 'DPC APK uploaded successfully! This version is now active.',
+        message: `${variant.toUpperCase()} APK uploaded successfully!`,
       })
     } catch (error) {
       console.error('APK upload error:', error)
@@ -140,7 +164,7 @@ export function DpcApkManager() {
         message: error instanceof Error ? error.message : 'Failed to upload APK',
       })
     }
-  }, [generateUploadUrl, saveApkMetadata, currentApk, deleteApk])
+  }, [currentApk, currentVariant, deleteApk, saveApkMetadata])
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -173,8 +197,8 @@ export function DpcApkManager() {
     setStatus({ stage: 'idle', progress: 0, message: '' })
   }, [])
 
-  const handleDeleteClick = (id: Id<"apkMetadata">, version: string) => {
-    setApkToDelete({ id, version })
+  const handleDeleteClick = (id: Id<"apkMetadata">, version: string, blobUrl: string) => {
+    setApkToDelete({ id, version, blobUrl })
     setDeleteDialogOpen(true)
   }
 
@@ -183,7 +207,15 @@ export function DpcApkManager() {
 
     setDeleting(true)
     try {
-      await deleteApk({ apkId: apkToDelete.id })
+      // Delete blob from Vercel
+      await fetch('/api/blobs/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blobUrl: apkToDelete.blobUrl }),
+      })
+
+      // Delete metadata from Convex
+      await deleteApk({ apkId: apkToDelete.id, blobUrl: apkToDelete.blobUrl })
       setDeleteDialogOpen(false)
       setApkToDelete(null)
     } catch (err) {
@@ -206,10 +238,20 @@ export function DpcApkManager() {
 
   return (
     <div className="space-y-6">
+      {/* Environment Info */}
+      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <p className="text-sm font-medium text-blue-900">
+          Current Environment: <span className="font-bold">{currentVariant.toUpperCase()}</span>
+        </p>
+        <p className="text-xs text-blue-700 mt-1">
+          Any APK uploaded here will be tagged as '{currentVariant}' variant
+        </p>
+      </div>
+
       {/* Current APK - Only show if APK exists */}
       {currentApk && currentApk !== undefined && (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Current DPC APK</h3>
+          <h3 className="text-lg font-semibold">Current {currentVariant.toUpperCase()} APK</h3>
           <div className="rounded-lg border bg-card p-4">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4 flex-1">
@@ -234,7 +276,7 @@ export function DpcApkManager() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => handleDeleteClick(currentApk._id, currentApk.version)}
+                onClick={() => handleDeleteClick(currentApk._id, currentApk.version, currentApk.blobUrl)}
                 title="Delete this APK"
               >
                 <Trash2 className="h-5 w-5 text-red-600" />
@@ -246,7 +288,10 @@ export function DpcApkManager() {
 
       {/* Upload Section */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Upload New Version</h3>
+        <h3 className="text-lg font-semibold">Upload New {currentVariant.toUpperCase()} APK</h3>
+        <p className="text-sm text-muted-foreground">
+          Upload any APK - it will be tagged as '{currentVariant}' based on your current environment.
+        </p>
 
         {/* Upload Area */}
         {status.stage === 'idle' && (
@@ -268,9 +313,9 @@ export function DpcApkManager() {
                 <Upload className="h-8 w-8 text-muted-foreground" />
               </div>
               <div className="text-center">
-                <p className="text-lg font-medium">Upload DPC APK</p>
+                <p className="text-lg font-medium">Upload {currentVariant.toUpperCase()} APK</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Drag and drop your APK file here, or click to browse
+                  Environment: {currentVariant}
                 </p>
               </div>
               <Button variant="outline" onClick={() => document.getElementById('dpc-apk-input')?.click()}>
