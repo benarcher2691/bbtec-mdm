@@ -176,16 +176,17 @@ class PollingService : Service() {
         Log.d(TAG, "🔄 startPolling called")
         pollingHandler.post(object : Runnable {
             override fun run() {
-                Log.d(TAG, "📡 Polling cycle started")
+                try {
+                    Log.d(TAG, "📡 Polling cycle started")
 
-                // Send heartbeat
-                apiClient.sendHeartbeat()
+                    // Send heartbeat
+                    apiClient.sendHeartbeat()
 
-                // Update notification with latest heartbeat time
-                updateNotification()
+                    // Update notification with latest heartbeat time
+                    updateNotification()
 
-                // Check for commands
-                apiClient.getCommands { commands ->
+                    // Check for commands
+                    apiClient.getCommands { commands ->
                     Log.d(TAG, "Got ${commands?.size ?: 0} commands")
                     commands?.forEach { command ->
                         Log.d(TAG, "Processing command: ${command.action} (ID: ${command.commandId})")
@@ -235,11 +236,22 @@ class PollingService : Service() {
                         }
                     }
                 }
-
-                // Schedule next poll
-                val intervalMs = prefsManager.getPingInterval() * 60 * 1000L
-                Log.d(TAG, "⏰ Scheduling next poll in ${intervalMs / 60000} minutes")
-                pollingHandler.postDelayed(this, intervalMs)
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Exception in polling cycle - will retry", e)
+                    // Don't let exceptions kill the polling loop
+                } finally {
+                    // ALWAYS schedule next poll, even if exception occurred
+                    try {
+                        val intervalMs = prefsManager.getPingInterval() * 60 * 1000L
+                        Log.d(TAG, "⏰ Scheduling next poll in ${intervalMs / 60000} minutes")
+                        pollingHandler.postDelayed(this, intervalMs)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ Fatal: Cannot schedule next poll", e)
+                        // Trigger recovery
+                        scheduleServiceKick()
+                        stopSelf()
+                    }
+                }
             }
         })
     }

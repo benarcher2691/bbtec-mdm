@@ -56,14 +56,14 @@ class HeartbeatHealthWorker(
 
         Log.d(TAG, "Last successful heartbeat: ${minutesSinceSuccess}m ago")
 
-        // Determine if service needs restart
-        val needsRestart = when {
+        // Determine if heartbeat is unhealthy
+        val isUnhealthy = when {
             !isServiceRunning -> {
-                Log.w(TAG, "⚠️ Service is not running - needs restart")
+                Log.w(TAG, "⚠️ Service flag says not running")
                 true
             }
             lastSuccessAt > 0 && minutesSinceSuccess > MAX_SILENCE_MINUTES -> {
-                Log.w(TAG, "⚠️ No heartbeat for ${minutesSinceSuccess}m (threshold: ${MAX_SILENCE_MINUTES}m) - needs restart")
+                Log.w(TAG, "⚠️ No heartbeat for ${minutesSinceSuccess}m (threshold: ${MAX_SILENCE_MINUTES}m)")
                 true
             }
             else -> {
@@ -72,9 +72,10 @@ class HeartbeatHealthWorker(
             }
         }
 
-        // Trigger restart if needed
-        if (needsRestart) {
-            Log.d(TAG, "🚑 Kicking service restart")
+        // ALWAYS attempt restart if unhealthy (safe even if service is running)
+        // This prevents stuck state where isRunning=true but service is dead
+        if (isUnhealthy) {
+            Log.d(TAG, "🚑 Kicking service restart (safe to call even if running)")
             PollingService.startService(applicationContext)
         }
 
