@@ -244,7 +244,7 @@ export function DpcApkManager() {
           Current Environment: <span className="font-bold">{currentVariant.toUpperCase()}</span>
         </p>
         <p className="text-xs text-blue-700 mt-1">
-          Any APK uploaded here will be tagged as '{currentVariant}' variant
+          Any APK uploaded here will be tagged as &lsquo;{currentVariant}&rsquo; variant
         </p>
       </div>
 
@@ -290,7 +290,7 @@ export function DpcApkManager() {
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">Upload New {currentVariant.toUpperCase()} APK</h3>
         <p className="text-sm text-muted-foreground">
-          Upload any APK - it will be tagged as '{currentVariant}' based on your current environment.
+          Upload any APK - it will be tagged as &lsquo;{currentVariant}&rsquo; based on your current environment.
         </p>
 
         {/* Upload Area */}
