@@ -9,7 +9,45 @@
 
 ## Current Priorities
 
-### Priority 0: Build New Local App 📱
+### Priority 0: ✅ Vercel Blob Storage Migration COMPLETE
+**Status:** ✅ RESOLVED (2025-11-14)
+**Impact:** ~90% cost reduction on bandwidth, no more Convex quota issues
+
+**What Was Done:**
+- ✅ Migrated APK storage from Convex File Storage to Vercel Blob Storage
+- ✅ Implemented environment-aware variant tagging (local/staging/production)
+- ✅ Automatic cleanup: only one APK per environment (max 3 total)
+- ✅ APK downloads redirect to Vercel Blob CDN URLs (fast, efficient)
+- ✅ Fixed package name bug (local uses base package `com.bbtec.mdm.client`)
+- ✅ End-to-end tested: upload → metadata extraction → QR generation → device provisioning
+- ✅ Device enrollment working perfectly from Vercel Blob
+
+**Architecture:**
+- APK binaries: Vercel Blob Storage (public CDN URLs)
+- APK metadata: Convex (version, signature, blobUrl, variant, download count)
+- Download flow: Client → Next.js API → 307 Redirect → Vercel Blob CDN
+
+**Cost Impact:**
+- Before: ~1.14 GB / 1 GB Convex bandwidth (14% over limit)
+- After: Nearly zero Convex bandwidth (only metadata queries)
+- Vercel Blob: 5 GB free tier (more than sufficient)
+
+**Files Modified:**
+- `convex/schema.ts` - Changed `storageId` to `blobUrl`, added `variant` field
+- `convex/apkStorage.ts` - Variant-aware queries, blob URL handling
+- `src/app/api/blobs/upload/route.ts` - NEW: Blob upload handler
+- `src/app/api/blobs/delete/route.ts` - NEW: Blob deletion handler
+- `src/app/api/apps/[storageId]/route.ts` - Redirect to blob URLs
+- `src/app/actions/enrollment.ts` - Environment-aware variant selection
+- `src/components/dpc-apk-manager.tsx` - Environment-based upload/deletion
+- `package.json` - Added `@vercel/blob` dependency
+- `.env.local` - Added `BLOB_READ_WRITE_TOKEN`
+
+**Date Completed:** 2025-11-14
+
+---
+
+### Priority 1: Build New Local App 📱
 **Status:** READY TO BUILD
 **Expected Time:** 10 minutes
 
@@ -34,7 +72,7 @@ adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
 
 ---
 
-### Priority 1: Policy Enforcement 🔐
+### Priority 2: Policy Enforcement 🔐
 **Status:** NOT STARTED (PolicyManager.kt exists but has placeholder logic)
 **Expected Time:** 3-4 days
 
@@ -59,7 +97,7 @@ adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
 
 ---
 
-### Priority 2: Enhanced Device Info 📊
+### Priority 3: Enhanced Device Info 📊
 **Status:** NOT STARTED
 **Expected Time:** 2-3 days
 
@@ -86,7 +124,7 @@ adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
 
 ---
 
-### Priority 3: Field Test Heartbeat Resilience ⏱️
+### Priority 4: Field Test Heartbeat Resilience ⏱️
 **Status:** AWAITING FIELD TEST (v0.0.38 features included in v0.0.41)
 **Expected Time:** 1-2 days (observation period)
 
@@ -108,7 +146,7 @@ adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
 
 ---
 
-### Priority 4: Security Improvements 🔒
+### Priority 5: Security Improvements 🔒
 **Status:** ✅ MAJOR IMPROVEMENTS COMPLETE (2025-11-13)
 
 **Completed Security Enhancements:**
@@ -164,6 +202,7 @@ adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
 **Backend:**
 - Next.js 15 (App Router) - Web UI
 - Convex - Real-time database & backend logic
+- Vercel Blob Storage - APK binary storage (CDN-backed)
 - Clerk - Authentication
 - Vercel - Deployment
 
@@ -183,36 +222,48 @@ adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
 
 ---
 
-### Hybrid APK Signature Extraction
+### APK Storage Architecture (Vercel Blob)
 
-**How It Works:**
+**Storage Flow:**
 
-**Local Development (Android SDK available):**
-1. Upload APK → Convex storage
-2. Extraction endpoint downloads APK
-3. Runs `apksigner verify --print-certs`
-4. Extracts real SHA-256 signature
-5. Converts to URL-safe Base64
-6. ✅ Dynamic extraction for any APK
+1. **Upload** (Client → Vercel Blob):
+   - User uploads APK via web UI
+   - Client calls `/api/blobs/upload` for auth token
+   - Server validates user auth (Clerk)
+   - Client uploads directly to Vercel Blob
+   - Returns public blob URL
 
-**Cloud Deployment (Vercel - no Android SDK):**
-1. Upload APK → Convex storage
-2. Extraction endpoint tries apksigner
-3. Command fails (tools not found)
-4. Falls back to environment detection:
-   - Preview/Production → `U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE` (release keystore)
-   - Local/Unknown → `iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk` (debug keystore)
-5. ✅ Returns correct signature for environment
+2. **Metadata Extraction** (Next.js → Convex):
+   - Call `/api/apk/extract-signature` with blob URL
+   - Downloads APK from blob URL
+   - Extracts signature using `apksigner` (local) or fallback (cloud)
+   - Parses package name, version from APK manifest
+   - Saves metadata to Convex with environment variant
 
-**Key Insight:** Signatures are static per keystore
-- Staging and production use the SAME keystore (`bbtec-mdm.keystore`)
-- Signature doesn't change with version bumps
-- Only changes if keystore is rotated (rare security event)
+3. **Download** (Device → Vercel Blob CDN):
+   - Device scans QR code with APK URL: `/api/apps/{apkId}?token={enrollmentToken}`
+   - Next.js validates enrollment token
+   - Returns 307 redirect to Vercel Blob CDN URL
+   - Device downloads from CDN (fast, no bandwidth cost)
 
-**When to Update Fallback Values:**
-- ✅ **Never for version bumps** - Same keystore = same signature
-- ✅ **Only when rotating keystores** - Rare security event
-- ✅ **When adding new environment** - Different keystore = different signature
+**Environment-Aware Variant Tagging:**
+- Web app detects runtime environment (local/staging/production)
+- Each uploaded APK tagged with environment variant
+- Only one APK per environment stored (max 3 total)
+- QR codes automatically use correct variant for environment
+
+**Hybrid Signature Extraction:**
+- **Local Development (Android SDK available):** Runs `apksigner verify --print-certs` for dynamic extraction
+- **Cloud Deployment (Vercel - no Android SDK):** Falls back to known keystore signatures
+  - Release keystore: `U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE`
+  - Debug keystore: `iFlIwQLMpbKE_1YZ5L-UHXMSmeKsHCwvJRsm7kgkblk`
+
+**Key Benefits:**
+- ✅ ~90% cost reduction vs Convex File Storage
+- ✅ CDN-backed downloads (fast, global distribution)
+- ✅ No bandwidth quota issues
+- ✅ Public URLs (works with Android provisioning)
+- ✅ Automatic cleanup (one APK per environment)
 
 ---
 
@@ -246,6 +297,9 @@ adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
 - `authentication-patterns.md` - Clerk + Convex auth best practices
 - `development-setup.md` - Multi-environment setup, Git workflow, Convex practices
 - `deployment-procedures.md` - Complete promotion and deployment guide
+
+**Migration Guides:**
+- `VERCEL_BLOB_MIGRATION.md` - Complete guide for Vercel Blob storage setup and troubleshooting
 
 **Project Context:**
 - `CLAUDE.md` - Project conventions, tech stack, coding standards

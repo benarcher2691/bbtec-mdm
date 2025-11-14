@@ -51,6 +51,7 @@ export const getApplication = query({
 
 /**
  * Save application metadata after upload
+ * Note: Applications table still uses Convex storage (can migrate to Vercel Blob later)
  */
 export const saveApplication = mutation({
   args: {

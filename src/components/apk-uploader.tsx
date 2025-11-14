@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Upload, CheckCircle2, XCircle, FileType, Loader2 } from 'lucide-react'
 import { parseApkMetadataClient, validateApkFile, formatFileSize } from '@/lib/apk-signature-client'
+import { upload } from '@vercel/blob/client'
 
 interface UploadStatus {
   stage: 'idle' | 'validating' | 'parsing' | 'uploading' | 'saving' | 'success' | 'error'
@@ -33,7 +34,6 @@ export function ApkUploader() {
   const [apkInfo, setApkInfo] = useState<ApkInfo | null>(null)
   const [isDragging, setIsDragging] = useState(false)
 
-  const generateUploadUrl = useMutation(api.apkStorage.generateUploadUrl)
   const saveApkMetadata = useMutation(api.apkStorage.saveApkMetadata)
 
   const handleFile = useCallback(async (file: File) => {
@@ -58,29 +58,24 @@ export function ApkUploader() {
       setStatus({ stage: 'validating', progress: 25, message: 'Validating APK structure...' })
       await parseApkMetadataClient(file) // Validates structure, returns placeholders
 
-      // Stage 3: Upload to Convex storage
-      setStatus({ stage: 'uploading', progress: 50, message: 'Uploading APK to storage...' })
-      const uploadUrl = await generateUploadUrl()
+      // Stage 3: Upload to Vercel Blob
+      setStatus({ stage: 'uploading', progress: 50, message: 'Uploading APK to Vercel Blob...' })
 
-      const uploadResponse = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: file,
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/blobs/upload',
       })
 
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to upload APK to storage')
-      }
-
-      const { storageId } = await uploadResponse.json()
+      console.log('[APK UPLOAD] Uploaded to Vercel Blob:', blob.url)
 
       // Stage 4: Extract metadata server-side (signature + package name)
+      // We'll use the blob URL to download and parse the APK
       setStatus({ stage: 'parsing', progress: 65, message: 'Extracting APK signature and metadata...' })
 
       const extractResponse = await fetch('/api/apk/extract-signature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storageId }),
+        body: JSON.stringify({ blobUrl: blob.url }),
       })
 
       if (!extractResponse.ok) {
@@ -94,6 +89,18 @@ export function ApkUploader() {
         throw new Error('Server-side extraction failed')
       }
 
+      // Auto-detect variant from package name
+      let variant: 'local' | 'staging' | 'production'
+      if (extractedMetadata.packageName.endsWith('.local')) {
+        variant = 'local'
+      } else if (extractedMetadata.packageName.endsWith('.staging')) {
+        variant = 'staging'
+      } else {
+        variant = 'production'
+      }
+
+      console.log('[APK UPLOAD] Auto-detected variant:', variant, 'from package:', extractedMetadata.packageName)
+
       // Update apkInfo with extracted metadata
       setApkInfo({
         packageName: extractedMetadata.packageName,
@@ -105,11 +112,12 @@ export function ApkUploader() {
       })
 
       // Stage 5: Save metadata to database
-      setStatus({ stage: 'saving', progress: 85, message: 'Saving APK metadata...' })
+      setStatus({ stage: 'saving', progress: 85, message: `Saving APK metadata (${variant} variant)...` })
       await saveApkMetadata({
         version: extractedMetadata.versionName,
         versionCode: extractedMetadata.versionCode,
-        storageId,
+        blobUrl: blob.url,
+        variant: variant,
         signatureChecksum: extractedMetadata.signatureChecksum,
         fileSize: file.size,
         fileName: file.name,
@@ -129,7 +137,7 @@ export function ApkUploader() {
         message: error instanceof Error ? error.message : 'Failed to upload APK',
       })
     }
-  }, [generateUploadUrl, saveApkMetadata])
+  }, [saveApkMetadata])
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -187,7 +195,7 @@ export function ApkUploader() {
             <div className="text-center">
               <p className="text-lg font-medium">Upload DPC APK</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Drag and drop your APK file here, or click to browse
+                Variant auto-detected from package name
               </p>
             </div>
             <Button variant="outline" onClick={() => document.getElementById('apk-input')?.click()}>

@@ -92,36 +92,38 @@ export async function createEnrollmentQRCode(
       }
       console.log('[QR GEN] Using Test DPC for comparison')
     } else {
-      // BBTec MDM Client
-      const currentApk = await convex.query(api.apkStorage.getCurrentApk)
+      // BBTec MDM Client - Environment-aware variant selection
+      const isPreview = process.env.VERCEL_ENV === 'preview'
+      const isLocal = process.env.NEXT_PUBLIC_CONVEX_URL?.includes('127.0.0.1')
+
+      let variant: 'local' | 'staging' | 'production'
+      let packageName: string
+      let environmentName: string
+
+      if (isLocal) {
+        // Local development uses local variant
+        variant = 'local'
+        packageName = 'com.bbtec.mdm.client'  // Local has NO suffix (see build.gradle.kts line 84)
+        environmentName = 'LOCAL'
+      } else if (isPreview) {
+        // Preview/staging deployments use staging APK
+        variant = 'staging'
+        packageName = 'com.bbtec.mdm.client.staging'
+        environmentName = 'PREVIEW/STAGING'
+      } else {
+        // Production uses production package
+        variant = 'production'
+        packageName = 'com.bbtec.mdm.client'
+        environmentName = 'PRODUCTION'
+      }
+
+      const currentApk = await convex.query(api.apkStorage.getCurrentApkByVariant, { variant })
 
       if (!currentApk) {
         return {
           success: false,
-          error: 'No DPC APK uploaded. Please upload the client APK first.',
+          error: `No ${variant} DPC APK uploaded. Please upload the client APK for ${variant} variant first.`,
         }
-      }
-
-      // Environment-aware package configuration
-      // This enforces using the correct APK variant for each environment
-      const isPreview = process.env.VERCEL_ENV === 'preview'
-      const isLocal = process.env.NEXT_PUBLIC_CONVEX_URL?.includes('127.0.0.1')
-
-      let packageName: string
-      let environmentName: string
-
-      if (isPreview) {
-        // Preview/staging deployments use staging APK
-        packageName = 'com.bbtec.mdm.client.staging'
-        environmentName = 'PREVIEW/STAGING'
-      } else if (isLocal) {
-        // Local development uses production package (for provisioning testing)
-        packageName = 'com.bbtec.mdm.client'
-        environmentName = 'LOCAL'
-      } else {
-        // Production uses production package
-        packageName = 'com.bbtec.mdm.client'
-        environmentName = 'PRODUCTION'
       }
 
       // Component name: package changes, but class path stays com.bbtec.mdm.client.MdmDeviceAdminReceiver
@@ -131,17 +133,18 @@ export async function createEnrollmentQRCode(
       dpcConfig = {
         componentName,
         packageName,
-        apkUrl: `${serverUrl}/api/apps/${currentApk.storageId}?token=${token.token}`,
+        apkUrl: `${serverUrl}/api/apps/${currentApk._id}?token=${token.token}`,
         signatureChecksum: currentApk.signatureChecksum,
         version: currentApk.version,
       }
 
       console.log('[QR GEN] Environment:', environmentName)
+      console.log('[QR GEN] Variant:', variant)
       console.log('[QR GEN] VERCEL_ENV:', process.env.VERCEL_ENV)
       console.log('[QR GEN] Package name:', packageName)
       console.log('[QR GEN] Component name:', componentName)
       console.log('[QR GEN] APK URL (redirect):', dpcConfig.apkUrl)
-      console.log('[QR GEN] Storage ID:', currentApk.storageId)
+      console.log('[QR GEN] APK ID:', currentApk._id)
     }
 
     // Build Android provisioning JSON (custom DPC format)
@@ -205,7 +208,7 @@ export async function createEnrollmentQRCode(
       debug: {
         apkUrl: dpcConfig.apkUrl,
         serverUrl,
-        storageId: dpcConfig.apkUrl.split('/').pop() || '',
+        apkId: dpcConfig.apkUrl.includes('/api/apps/') ? dpcConfig.apkUrl.split('/api/apps/')[1]?.split('?')[0] : '',
         convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
         dpcType,
         networkDetection: {
