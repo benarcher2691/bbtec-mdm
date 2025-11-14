@@ -333,6 +333,10 @@ class PollingService : Service() {
         Log.w(TAG, "⚠️ onTaskRemoved - app swiped away")
         // Schedule recovery via WorkManager
         scheduleServiceKick()
+        // CRITICAL: Kill self to ensure clean restart
+        // ServiceKickWorker will restart us fresh with onCreate()
+        Log.w(TAG, "⚠️ Stopping self to allow clean restart")
+        stopSelf()
         super.onTaskRemoved(rootIntent)
     }
 }
