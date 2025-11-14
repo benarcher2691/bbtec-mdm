@@ -3,57 +3,13 @@
 **Branch:** `feature/offline-local-dev`
 **Web Version:** 0.0.4
 **Android Version:** 0.0.43
-**Last Updated:** 2025-11-13
-
----
-
-## Next Steps
-
-### 🚀 Phase 2: Deploy to Production
-
-**Prerequisites:** Staging validation complete ✅
-
-**Steps:**
-1. [ ] Build production APK (`./gradlew assembleProductionRelease`)
-2. [ ] Extract production signature (should match staging: `U80OGp4_OjjGZoQqmJTKjrHt3Nz0-w4TELMDj6cbziE`)
-3. [ ] Create PR: `development` → `master`
-4. [ ] Configure production environment variables in Vercel
-5. [ ] Deploy Convex schema to production (`npm run convex:deploy:prod`)
-6. [ ] Smoke test enrollment with production APK
-7. [ ] Merge to master (triggers production deployment)
-
-**Detailed procedures:** See [docs/deployment-procedures.md](../docs/deployment-procedures.md)
+**Last Updated:** 2025-11-14
 
 ---
 
 ## Current Priorities
 
-### Priority 1: QR Code Generation Review 📱
-**Status:** NOT STARTED
-**Expected Time:** 2-3 hours
-
-**Tasks:**
-- [ ] Verify QR code correctness across all environments (local, staging, production)
-- [ ] Test QR code scanning on different devices/scanners
-- [ ] Validate environment detection logic (VERCEL_ENV, NEXT_PUBLIC_CONVEX_URL)
-- [ ] Ensure proper package name mapping per environment:
-  - Local: `com.bbtec.mdm.client` (production package, debug build)
-  - Staging/Preview: `com.bbtec.mdm.client.staging` (staging package, release build)
-  - Production: `com.bbtec.mdm.client` (production package, release build)
-- [ ] Test component name construction (verify no `.staging` in class path)
-- [ ] Verify error correction levels and margins are appropriate
-- [ ] Test enrollment flow end-to-end in each environment
-
-**Why Important:** QR code is the entry point for device enrollment - must be 100% correct in all environments to avoid enrollment failures.
-
-**Files to Review:**
-- `src/app/actions/enrollment.ts` - QR code generation logic
-- `src/components/qr-code-generator.tsx` - Client-side QR rendering
-- `src/lib/network-detection.ts` - Environment detection
-
----
-
-### Priority 2: Policy Enforcement 🔐
+### Priority 1: Policy Enforcement 🔐
 **Status:** NOT STARTED (PolicyManager.kt exists but has placeholder logic)
 **Expected Time:** 3-4 days
 
@@ -78,7 +34,7 @@
 
 ---
 
-### Priority 3: Enhanced Device Info 📊
+### Priority 2: Enhanced Device Info 📊
 **Status:** NOT STARTED
 **Expected Time:** 2-3 days
 
@@ -105,7 +61,7 @@
 
 ---
 
-### Priority 4: Field Test Heartbeat Resilience ⏱️
+### Priority 3: Field Test Heartbeat Resilience ⏱️
 **Status:** AWAITING FIELD TEST (v0.0.38 features included in v0.0.41)
 **Expected Time:** 1-2 days (observation period)
 
@@ -127,7 +83,7 @@
 
 ---
 
-### Priority 5: Security Improvements 🔒
+### Priority 4: Security Improvements 🔒
 **Status:** ✅ MAJOR IMPROVEMENTS COMPLETE (2025-11-13)
 
 **Completed Security Enhancements:**

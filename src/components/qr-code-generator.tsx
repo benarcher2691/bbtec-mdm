@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { createEnrollmentQRCode } from "@/app/actions/enrollment"
-import { QrCode, Copy, Check, AlertCircle, ArrowRight, Loader2, Network } from "lucide-react"
+import { QrCode, Check, AlertCircle, ArrowRight, Loader2, Network } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { Id } from "../../convex/_generated/dataModel"
 import { useServerUrl } from "@/hooks/useServerUrl"
@@ -31,7 +31,6 @@ export function QRCodeGenerator() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tokenData, setTokenData] = useState<EnrollmentToken | null>(null)
-  const [copied, setCopied] = useState(false)
   const [currentTokenId, setCurrentTokenId] = useState<Id<"enrollmentTokens"> | null>(null)
   const [selectedPolicyId, setSelectedPolicyId] = useState<Id<"policies"> | null>(null)
   const [selectedCompanyUserId, setSelectedCompanyUserId] = useState<Id<"companyUsers"> | null>(null)
@@ -116,18 +115,15 @@ export function QRCodeGenerator() {
     }
   }
 
-  const handleCopyToken = async () => {
-    if (tokenData?.token) {
-      await navigator.clipboard.writeText(tokenData.token)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
   const formatExpirationTime = (timestamp: string) => {
     if (!timestamp) return 'Unknown'
     const date = new Date(timestamp)
-    return date.toISOString().split('T')[0] // YYYY-MM-DD
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    return `${year}-${month}-${day} ${hours}:${minutes}`
   }
 
   return (
@@ -304,31 +300,6 @@ export function QRCodeGenerator() {
 
             {/* Token Details */}
             <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">
-                  Enrollment Token
-                </label>
-                <div className="mt-2 flex gap-2">
-                  <code className="flex-1 p-3 bg-slate-100 rounded-md text-sm font-mono break-all">
-                    {tokenData.token}
-                  </code>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={handleCopyToken}
-                    title="Copy token"
-                  >
-                    {copied ? (
-                      <Check className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              <Separator />
-
               <div>
                 <label className="text-sm font-medium text-muted-foreground">
                   Expires

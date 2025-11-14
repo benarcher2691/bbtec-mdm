@@ -20,14 +20,12 @@ import {
   Upload,
   CheckCircle2,
   XCircle,
-  FileType,
   Loader2,
   Trash2,
   Package,
-  Download,
-  Shield
+  Download
 } from 'lucide-react'
-import { parseApkMetadataClient, validateApkFile, formatFileSize } from '@/lib/apk-signature-client'
+import { parseApkMetadataClient, validateApkFile } from '@/lib/apk-signature-client'
 import type { Id } from '../../convex/_generated/dataModel'
 
 interface UploadStatus {
@@ -36,29 +34,18 @@ interface UploadStatus {
   message: string
 }
 
-interface ApkInfo {
-  packageName: string
-  versionName: string
-  versionCode: number
-  signatureChecksum: string
-  fileSize: string
-  fileName: string
-}
-
 export function DpcApkManager() {
   const [status, setStatus] = useState<UploadStatus>({
     stage: 'idle',
     progress: 0,
     message: '',
   })
-  const [apkInfo, setApkInfo] = useState<ApkInfo | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [apkToDelete, setApkToDelete] = useState<{ id: Id<"apkMetadata">; version: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
 
   // Convex queries and mutations
-  const apkList = useQuery(api.apkStorage.listApks)
   const currentApk = useQuery(api.apkStorage.getCurrentApk)
   const generateUploadUrl = useMutation(api.apkStorage.generateUploadUrl)
   const saveApkMetadata = useMutation(api.apkStorage.saveApkMetadata)
@@ -122,16 +109,6 @@ export function DpcApkManager() {
         throw new Error('Server-side extraction failed')
       }
 
-      // Update apkInfo with extracted metadata
-      setApkInfo({
-        packageName: extractedMetadata.packageName,
-        versionName: extractedMetadata.versionName,
-        versionCode: extractedMetadata.versionCode,
-        signatureChecksum: extractedMetadata.signatureChecksum,
-        fileSize: formatFileSize(file.size),
-        fileName: file.name,
-      })
-
       // Stage 5: Save metadata to database
       setStatus({ stage: 'saving', progress: 85, message: 'Saving APK metadata...' })
       await saveApkMetadata({
@@ -142,6 +119,12 @@ export function DpcApkManager() {
         fileSize: file.size,
         fileName: file.name,
       })
+
+      // Stage 6: Delete old APK if exists
+      if (currentApk) {
+        setStatus({ stage: 'saving', progress: 95, message: 'Removing old APK version...' })
+        await deleteApk({ apkId: currentApk._id })
+      }
 
       // Success!
       setStatus({
@@ -157,7 +140,7 @@ export function DpcApkManager() {
         message: error instanceof Error ? error.message : 'Failed to upload APK',
       })
     }
-  }, [generateUploadUrl, saveApkMetadata])
+  }, [generateUploadUrl, saveApkMetadata, currentApk, deleteApk])
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -188,7 +171,6 @@ export function DpcApkManager() {
 
   const resetUploader = useCallback(() => {
     setStatus({ stage: 'idle', progress: 0, message: '' })
-    setApkInfo(null)
   }, [])
 
   const handleDeleteClick = (id: Id<"apkMetadata">, version: string) => {
@@ -213,17 +195,55 @@ export function DpcApkManager() {
   }
 
   const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    const date = new Date(timestamp)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    return `${year}-${month}-${day} ${hours}:${minutes}`
   }
 
   return (
     <div className="space-y-6">
+      {/* Current APK - Only show if APK exists */}
+      {currentApk && currentApk !== undefined && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold">Current DPC APK</h3>
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4 flex-1">
+                <div className="rounded-lg bg-blue-100 p-2">
+                  <Package className="h-5 w-5 text-blue-600" />
+                </div>
+                <div className="flex items-center gap-6 flex-1 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Version: </span>
+                    <span className="font-semibold">v{currentApk.version}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Uploaded: </span>
+                    <span className="font-medium">{formatDate(currentApk.uploadedAt)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Download className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{currentApk.downloadCount}</span>
+                  </div>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleDeleteClick(currentApk._id, currentApk.version)}
+                title="Delete this APK"
+              >
+                <Trash2 className="h-5 w-5 text-red-600" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Upload Section */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">Upload New Version</h3>
@@ -235,7 +255,7 @@ export function DpcApkManager() {
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             className={`
-              border-2 border-dashed rounded-lg p-8
+              border-2 border-dashed rounded-lg px-8 py-6
               transition-colors duration-200
               ${isDragging
                 ? 'border-primary bg-primary/5'
@@ -279,7 +299,7 @@ export function DpcApkManager() {
         )}
 
         {/* Success */}
-        {status.stage === 'success' && apkInfo && (
+        {status.stage === 'success' && (
           <div className="space-y-4">
             <Alert className="border-green-200 bg-green-50">
               <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -287,38 +307,6 @@ export function DpcApkManager() {
                 {status.message}
               </AlertDescription>
             </Alert>
-
-            <div className="rounded-lg border bg-card p-4">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <FileType className="h-5 w-5 text-primary" />
-                </div>
-                <div className="flex-1 space-y-2">
-                  <div>
-                    <p className="font-medium">{apkInfo.fileName}</p>
-                    <p className="text-sm text-muted-foreground">{apkInfo.fileSize}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Package:</span>
-                      <p className="font-mono text-xs mt-0.5">{apkInfo.packageName}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Version:</span>
-                      <p className="font-mono text-xs mt-0.5">
-                        {apkInfo.versionName} ({apkInfo.versionCode})
-                      </p>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="text-muted-foreground">Signature:</span>
-                      <p className="font-mono text-xs mt-0.5 break-all">
-                        {apkInfo.signatureChecksum}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
 
             <Button onClick={resetUploader} variant="outline" className="w-full">
               Upload Another Version
@@ -340,130 +328,15 @@ export function DpcApkManager() {
         )}
       </div>
 
-      {/* Version History */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">DPC APK Versions</h3>
-          <p className="text-sm text-muted-foreground">
-            {apkList?.length || 0} version{apkList?.length === 1 ? '' : 's'}
-          </p>
-        </div>
-
-        {/* Loading state */}
-        {apkList === undefined ? (
-          <div className="rounded-lg border bg-card p-12">
-            <div className="flex flex-col items-center gap-4">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Loading DPC versions...</p>
-            </div>
-          </div>
-        ) : apkList.length === 0 ? (
-          <div className="rounded-lg border bg-card p-12">
-            <div className="flex flex-col items-center gap-4 text-center">
-              <div className="rounded-full bg-slate-100 p-4">
-                <Package className="h-8 w-8 text-slate-400" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-lg">No DPC APK Uploaded</h3>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Upload your first DPC APK to get started
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="rounded-lg border bg-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b">
-                  <tr>
-                    <th className="text-left p-4 font-medium text-sm">Version</th>
-                    <th className="text-left p-4 font-medium text-sm">File Name</th>
-                    <th className="text-left p-4 font-medium text-sm">Size</th>
-                    <th className="text-left p-4 font-medium text-sm">Signature</th>
-                    <th className="text-left p-4 font-medium text-sm">Uploaded</th>
-                    <th className="text-left p-4 font-medium text-sm">Downloads</th>
-                    <th className="text-left p-4 font-medium text-sm w-12"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {apkList.map((apk) => {
-                    const isCurrent = currentApk?._id === apk._id
-                    return (
-                      <tr key={apk._id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-4">
-                          <div className="flex items-center gap-2">
-                            <div className="rounded-lg bg-blue-100 p-2">
-                              <Package className="h-5 w-5 text-blue-600" />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium">v{apk.version}</p>
-                                {isCurrent && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                    <Shield className="h-3 w-3" />
-                                    Current
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-sm text-muted-foreground">
-                                Code: {apk.versionCode}
-                              </p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <p className="text-sm font-mono">{apk.fileName}</p>
-                        </td>
-                        <td className="p-4">
-                          <p className="text-sm">{formatFileSize(apk.fileSize)}</p>
-                        </td>
-                        <td className="p-4">
-                          <code className="text-xs bg-slate-100 px-2 py-1 rounded block max-w-[200px] truncate">
-                            {apk.signatureChecksum}
-                          </code>
-                        </td>
-                        <td className="p-4">
-                          <p className="text-sm text-muted-foreground">
-                            {formatDate(apk.uploadedAt)}
-                          </p>
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-2">
-                            <Download className="h-4 w-4 text-muted-foreground" />
-                            <p className="text-sm">{apk.downloadCount}</p>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteClick(apk._id, apk.version)}
-                            disabled={isCurrent}
-                            title={isCurrent ? "Cannot delete current version" : "Delete this version"}
-                          >
-                            <Trash2 className={`h-4 w-4 ${isCurrent ? 'text-slate-300' : 'text-red-600'}`} />
-                          </Button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete DPC APK Version?</AlertDialogTitle>
+            <AlertDialogTitle>Delete DPC APK?</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete <strong>v{apkToDelete?.version}</strong>?
               <br /><br />
-              This will permanently remove the APK file from storage. This action cannot be undone.
+              This will permanently remove the APK file from storage and you will need to upload a new one. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

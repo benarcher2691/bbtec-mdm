@@ -125,11 +125,6 @@ export const deleteApk = mutation({
     const apk = await ctx.db.get(args.apkId)
     if (!apk) throw new Error("APK not found")
 
-    // Don't allow deletion of current APK
-    if (apk.isCurrent) {
-      throw new Error("Cannot delete current APK. Upload a new version first.")
-    }
-
     // Delete from storage
     await ctx.storage.delete(apk.storageId)
 
