@@ -2,22 +2,27 @@
 
 ## Overview
 
-This step-by-step tutorial walks you through building an Android APK from scratch, including version bumping and verification. Perfect for new team members or as a refresher for experienced developers.
+This step-by-step tutorial walks you through building an Android APK from scratch, including version management, Convex deployment, and git workflow. Perfect for new team members or as a refresher for experienced developers.
 
 **What you'll learn:**
-- How to check and bump version numbers
-- How to build local debug APKs
+- How to manage versions across branches
+- When and how to bump version numbers
+- How to deploy Convex schema changes
+- How to build APKs for different environments
 - How to verify build provenance (git metadata)
-- How to verify APK signing and metadata
-- How to archive APKs for long-term storage
-- Git workflow for version tagging
+- Complete git workflow for releases
+- Integrated release workflows (local/staging/production)
 
 **Prerequisites:**
 - Android SDK installed at `/opt/android-sdk/`
 - Git repository cloned
 - `keystore.properties` file configured (see `android-build-variants.md`)
+- Node.js and npm installed (for Convex deployment)
 
-**Time required:** ~5 minutes
+**Time required:**
+- Local testing: ~5 minutes
+- Staging release: ~10 minutes
+- Production release: ~15 minutes
 
 ---
 
@@ -38,6 +43,84 @@ This step-by-step tutorial walks you through building an Android APK from scratc
 
 ---
 
+## Understanding Version Management
+
+### **Semantic Versioning**
+
+We use semantic versioning: `MAJOR.MINOR.PATCH` (e.g., `0.0.45`)
+
+**Currently in early development:**
+- `MAJOR = 0` - Pre-release (breaking changes allowed)
+- `MINOR = 0` - Not yet stabilized
+- `PATCH = 45` - Increment with each release
+
+**Version components:**
+- `versionCode` - Integer that MUST increment with every release (Android requirement)
+- `versionName` - Human-readable string (e.g., "0.0.45")
+
+### **Branch-Based Version Strategy**
+
+```
+master (production)
+  versionCode: 44, versionName: "0.0.44"
+  ↑
+  └─ Merge from development
+
+development (staging)
+  versionCode: 45, versionName: "0.0.45"
+  ↑
+  └─ Merge from feature branch
+
+feature/web-gui-2 (local testing)
+  versionCode: 45, versionName: "0.0.45"  ← You bump here first!
+```
+
+**Key principles:**
+1. **Bump version in feature branch** - Not in development or master
+2. **One version per branch** - Don't bump multiple times in same branch
+3. **Version increments when merging** - development gets new version from feature branch
+4. **Master always lags** - It gets versions from development
+
+### **When to Bump Versions**
+
+**Bump PATCH version (+1) when:**
+- ✅ Bug fixes
+- ✅ Small improvements
+- ✅ UI tweaks
+- ✅ New APK build for testing/deployment
+
+**DON'T bump when:**
+- ❌ Work in progress (not ready for testing)
+- ❌ Experimental changes
+- ❌ Local-only testing
+
+**Example timeline:**
+1. Start feature branch → version is 44 (inherited from development)
+2. Finish feature → bump to 45
+3. Build and test → still 45
+4. Merge to development → development becomes 45
+5. Later, start new feature → inherit 45 from development
+6. Finish new feature → bump to 46
+
+### **What Happens When You Merge Branches**
+
+**Scenario: You have local changes with version 45, development is still on 44**
+
+```bash
+git checkout development
+git merge feature/web-gui-2
+# Result: development now has version 45 from your feature branch
+```
+
+**No conflicts!** The newer version (45) overwrites the old version (44) in `build.gradle.kts`.
+
+**After merge:**
+- ✅ Development has your version (45)
+- ✅ Git history preserved
+- ✅ No need to bump again
+
+---
+
 ## Step-by-Step Walkthrough
 
 ### **Step 1: Check Current Version**
@@ -51,49 +134,57 @@ grep -A2 "versionCode\|versionName" app/build.gradle.kts | grep -E "versionCode|
 
 **Expected output:**
 ```
-versionCode = 42
-versionName = "0.0.42"
+versionCode = 45
+versionName = "0.0.45"
 versionNameSuffix = "-local"
 versionNameSuffix = "-staging"
 ```
 
 **What you're seeing:**
-- `versionCode = 42` - Internal Android version number (must increment)
-- `versionName = "0.0.42"` - User-visible version string
+- `versionCode = 45` - Internal Android version number (must increment)
+- `versionName = "0.0.45"` - User-visible version string
 - `versionNameSuffix` - Automatic suffixes added by flavors (ignore these)
 
 **Note:** The suffix lines are normal - they show flavor-specific suffixes that get appended automatically (`-local`, `-staging`).
 
----
-
-### **Step 2: Decide on Version (Bump if Needed)**
-
-From Step 1, you saw the version in `build.gradle.kts` (e.g., version 43).
-
-**This is the version that will be built into your next APK.**
-
-**💡 Check what's been previously released:**
+**Now check what's been released:**
 ```bash
 git tag -l "android-v*" | sort -V | tail -5
 ```
 
 **Example output:**
 ```
-android-v0.0.42
+android-v0.0.44
 ```
 
-**Now decide:**
-- Latest tag is `android-v0.0.42`, build.gradle.kts shows `43` → **Version 43 is NEW**
-- You want to build version 43 → **Skip to Step 3** (no bumping needed)
-- You want to build version 44 instead → **Bump it below**
+**What this means:**
+- Latest tagged version: `0.0.44`
+- Current version in code: `0.0.45`
+- **Version 45 is new and untagged** ✅
 
 ---
 
-**To manually bump the version (example: 43 → 44):**
+### **Step 2: Decide on Version (Bump if Needed)**
+
+From Step 1, you saw the version in `build.gradle.kts` (e.g., version 45).
+
+**This is the version that will be built into your next APK.**
+
+**Decision matrix:**
+
+| Situation | Action |
+|-----------|--------|
+| Code version (45) > Latest tag (44) | ✅ **Skip to Step 3** - Already bumped |
+| Code version = Latest tag | ⚠️ **Bump below** - Need new version |
+| Working on unfinished feature | ❌ **Don't bump yet** - Wait until ready |
+
+---
+
+**To manually bump the version (example: 45 → 46):**
 
 ```bash
-sed -i 's/versionCode = 43/versionCode = 44/' app/build.gradle.kts
-sed -i 's/versionName = "0.0.43"/versionName = "0.0.44"/' app/build.gradle.kts
+sed -i 's/versionCode = 45/versionCode = 46/' app/build.gradle.kts
+sed -i 's/versionName = "0.0.45"/versionName = "0.0.46"/' app/build.gradle.kts
 ```
 
 **Verify the change:**
@@ -103,8 +194,8 @@ grep -A2 "versionCode\|versionName" app/build.gradle.kts | grep -E "versionCode|
 
 **Expected output:**
 ```
-versionCode = 44
-versionName = "0.0.44"
+versionCode = 46
+versionName = "0.0.46"
 versionNameSuffix = "-local"
 versionNameSuffix = "-staging"
 ```
@@ -114,7 +205,7 @@ versionNameSuffix = "-staging"
 **💡 Important notes:**
 - **Versions are NEVER automatically bumped** - you must change them manually
 - `versionCode` - Must increment with every release (Google Play requirement)
-- `versionName` - Semantic versioning: `MAJOR.MINOR.PATCH` (e.g., 0.0.44)
+- `versionName` - Semantic versioning: `MAJOR.MINOR.PATCH` (e.g., 0.0.46)
 - All three flavors (local, staging, production) share the same base version
 - **The version in build.gradle.kts IS what will be built into your APK**
 
@@ -297,33 +388,33 @@ cat app/build/generated/source/buildConfig/staging/release/com/bbtec/mdm/client/
 cat app/build/generated/source/buildConfig/production/release/com/bbtec/mdm/client/BuildConfig.java | grep -E "VERSION|GIT_|BUILD_"
 ```
 
-**Expected output (example for Local Debug):**
+**Expected output (example for Staging Release):**
 ```java
-public static final String BUILD_TYPE = "debug";
-public static final int VERSION_CODE = 43;
-public static final String VERSION_NAME = "0.0.43-local";
-public static final String BUILD_TIMESTAMP = "2025-11-12T21:45:33.481967820Z";
-public static final String GIT_BRANCH = "feature/offline-local-dev";
-public static final String GIT_COMMIT_SHA = "47e035b";
+public static final String BUILD_TYPE = "release";
+public static final int VERSION_CODE = 45;
+public static final String VERSION_NAME = "0.0.45-staging";
+public static final String BUILD_TIMESTAMP = "2025-11-14T10:30:15.123456789Z";
+public static final String GIT_BRANCH = "feature/web-gui-2";
+public static final String GIT_COMMIT_SHA = "c166445";
 ```
 
 **Note:** VERSION_NAME suffix changes per environment:
-- Local: `"0.0.43-local"`
-- Staging: `"0.0.43-staging"`
-- Production: `"0.0.43"` (no suffix)
+- Local: `"0.0.45-local"`
+- Staging: `"0.0.45-staging"`
+- Production: `"0.0.45"` (no suffix)
 
 🎉 **This is build provenance in action!**
 
 **What you're seeing:**
-- `VERSION_CODE = 43` - Your version number ✅
+- `VERSION_CODE = 45` - Your version number ✅
 - `VERSION_NAME` - Version with environment-specific suffix ✅
-- `GIT_COMMIT_SHA = "47e035b"` - The exact git commit this APK was built from ✅
+- `GIT_COMMIT_SHA = "c166445"` - The exact git commit this APK was built from ✅
 - `GIT_BRANCH = "feature/..."` - The branch name ✅
 - `BUILD_TIMESTAMP` - Exact build time (ISO 8601 format) ✅
 
 **Why this matters:**
 - You can trace any production APK back to its exact source code
-- Reproducible builds: `git checkout 47e035b` → rebuild → same APK
+- Reproducible builds: `git checkout c166445` → rebuild → same APK
 - Debug production issues: check logs for commit SHA → checkout → investigate
 
 ---
@@ -347,9 +438,9 @@ Extract and verify the APK's Android metadata using `aapt`.
 /opt/android-sdk/build-tools/34.0.0/aapt dump badging app/build/outputs/apk/production/release/app-production-release.apk | grep -E "package:|versionCode|versionName"
 ```
 
-**Expected output (example for Local Debug):**
+**Expected output (example for Staging Release):**
 ```
-package: name='com.bbtec.mdm.client' versionCode='43' versionName='0.0.43-local' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+package: name='com.bbtec.mdm.client.staging' versionCode='45' versionName='0.0.45-staging' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
 ```
 
 **Expected package names per environment:**
@@ -359,8 +450,8 @@ package: name='com.bbtec.mdm.client' versionCode='43' versionName='0.0.43-local'
 
 ✅ **Verify these values:**
 - `name=` - Package name matches environment ✅
-- `versionCode='43'` - Matches what you set ✅
-- `versionName='0.0.43-...'` - Matches with environment suffix ✅
+- `versionCode='45'` - Matches what you set ✅
+- `versionName='0.0.45-...'` - Matches with environment suffix ✅
 - `compileSdkVersion='34'` - Android 14 (API level 34) ✅
 
 **What this verifies:**
@@ -419,30 +510,41 @@ Verified using v3 scheme (APK Signature Scheme v3): false
 
 Now archive the built APK for long-term storage with proper naming:
 
+**For Local Debug:**
 ```bash
 ./archive-apk.sh local
 ```
 
-**Expected output:**
+**For Staging Release:**
+```bash
+./archive-apk.sh staging
 ```
-Using default build type for local: debug
+
+**For Production Release:**
+```bash
+./archive-apk.sh production
+```
+
+**Expected output (example for Staging):**
+```
+Using default build type for staging: release
 
 Archiving APK...
-  Flavor:      local
-  Build Type:  debug
-  Version:     0.0.43
-  Git SHA:     47e035b
+  Flavor:      staging
+  Build Type:  release
+  Version:     0.0.45
+  Git SHA:     c166445
 
-  Source:      app/build/outputs/apk/local/debug/app-local-debug.apk
-  Destination: ../artifacts/apks/local/app-local-debug-0.0.43-47e035b.apk
+  Source:      app/build/outputs/apk/staging/release/app-staging-release.apk
+  Destination: ../artifacts/apks/staging/app-staging-release-0.0.45-c166445.apk
 
-✓ Successfully archived APK (15M)
+✓ Successfully archived APK (12M)
 
 Archived APK location:
-  ../artifacts/apks/local/app-local-debug-0.0.43-47e035b.apk
+  ../artifacts/apks/staging/app-staging-release-0.0.45-c166445.apk
 
 To list all archived APKs for this flavor:
-  ls -lht ../artifacts/apks/local/
+  ls -lht ../artifacts/apks/staging/
 ```
 
 **What this does:**
@@ -468,9 +570,9 @@ To list all archived APKs for this flavor:
 app-{flavor}-{buildType}-{version}-{gitSHA}.apk
 
 Examples:
-  app-local-debug-0.0.43-47e035b.apk
-  app-staging-release-0.0.43-47e035b.apk
-  app-production-release-0.0.43-47e035b.apk
+  app-local-debug-0.0.45-c166445.apk
+  app-staging-release-0.0.45-c166445.apk
+  app-production-release-0.0.45-c166445.apk
 ```
 
 **Why archive APKs:**
@@ -494,11 +596,104 @@ ls -lht ../artifacts/apks/production/
 
 ---
 
-## Git Workflow: Tag Your Release
+## ⚠️  CRITICAL: Deploy Convex Schema Changes
 
-After building, verifying, and archiving, tag the release in git:
+### **Step 10: Deploy Convex to Development/Staging**
 
-### **Step 10: Commit Version Bump**
+**IMPORTANT:** If you made ANY changes to Convex schema or functions, you MUST deploy them BEFORE tagging your release!
+
+**When to deploy:**
+- ✅ Changed any `convex/*.ts` files
+- ✅ Modified Convex schema (`convex/schema.ts`)
+- ✅ Updated queries, mutations, or actions
+- ✅ Added new Convex functions
+- ✅ Building staging or production APKs
+
+**When to skip:**
+- ❌ Only changed Android code
+- ❌ Only changed web UI
+- ❌ No Convex changes in your branch
+
+---
+
+**For Staging/Development builds:**
+
+```bash
+cd /home/ben/sandbox/bbtec-mdm
+npm run convex:deploy:dev
+```
+
+**Expected output:**
+```
+✔ Deploying Convex functions to kindly-mule-339 (dev)
+✔ Schema validation passed
+✔ Functions deployed successfully
+✔ Deployment complete!
+```
+
+**What this does:**
+- Deploys schema and functions to `kindly-mule-339` (dev Convex deployment)
+- Vercel preview deployments will use this
+- Staging APKs will connect to this deployment
+- Preserves your local `.env.local` (doesn't affect local development)
+
+---
+
+**For Production builds:**
+
+```bash
+cd /home/ben/sandbox/bbtec-mdm
+npm run convex:deploy:prod
+```
+
+**Expected output:**
+```
+✔ Deploying Convex functions to expert-lemur-691 (prod)
+✔ Schema validation passed
+✔ Functions deployed successfully
+✔ Deployment complete!
+```
+
+**What this does:**
+- Deploys schema and functions to `expert-lemur-691` (production Convex deployment)
+- Production Vercel deployment will use this
+- Production APKs will connect to this deployment
+- Preserves your local `.env.local` (doesn't affect local development)
+
+---
+
+**Why this matters:**
+
+**❌ If you DON'T deploy Convex before building APK:**
+- APK expects new schema fields → crashes when field missing
+- New functions not available → API calls fail
+- Devices can't register or send heartbeats
+- Enrollment fails
+
+**✅ If you DO deploy Convex first:**
+- Schema matches what APK expects
+- All functions available
+- Smooth deployment
+- No surprises
+
+**Pro tip:** Make Convex deployment part of your muscle memory:
+```bash
+# Staging workflow
+npm run convex:deploy:dev
+cd android-client && ./gradlew assembleStagingRelease
+
+# Production workflow
+npm run convex:deploy:prod
+cd android-client && ./gradlew assembleProductionRelease
+```
+
+---
+
+## Git Workflow: Commit, Tag, and Push
+
+### **Step 11: Commit Version Bump**
+
+Navigate back to the repository root and commit the version change:
 
 ```bash
 cd /home/ben/sandbox/bbtec-mdm
@@ -508,71 +703,349 @@ git status
 
 **Expected output:**
 ```
+On branch feature/web-gui-2
 Changes to be committed:
   modified:   android-client/app/build.gradle.kts
 ```
 
 **Commit the change:**
 ```bash
-git commit -m "chore: Bump Android client to v0.0.43"
+git commit -m "chore: bump Android client to v0.0.45"
 ```
 
 **Expected output:**
 ```
-[feature/offline-local-dev abc1234] chore: Bump Android client to v0.0.43
+[feature/web-gui-2 abc1234] chore: bump Android client to v0.0.45
  1 file changed, 2 insertions(+), 2 deletions(-)
 ```
 
+**Why commit first:**
+- Git tag points to a specific commit
+- Commit must exist before tagging
+- Clean history: version bump → tag → push
+
 ---
 
-### **Step 11: Tag the Release**
+### **Step 12: Tag the Release**
+
+Create an annotated tag for this release:
 
 ```bash
-git tag -a android-v0.0.43 -m "Android client v0.0.43
+git tag -a android-v0.0.45 -m "Android client v0.0.45
 
 Features/changes in this release:
-- [Describe what changed]
+- Critical heartbeat reliability fixes (zombie state prevention)
+- Web UI v0.0.5 improvements
+- Dynamic device status monitoring
+
+Built from commit: c166445
+Build date: 2025-11-14
 "
 ```
 
 **Verify the tag was created:**
 ```bash
-git tag -l "android-v*"
+git tag -l "android-v*" | tail -3
 ```
 
 **Expected output:**
 ```
-android-v0.0.42
 android-v0.0.43
+android-v0.0.44
+android-v0.0.45
 ```
 
 **What this gives you:**
 - Permanent marker in git history
-- Easy checkout: `git checkout android-v0.0.43`
+- Easy checkout: `git checkout android-v0.0.45`
 - Reproducible builds from any tagged version
 - Clear release history: `git log --oneline --decorate`
+
+**Tag best practices:**
+- Use annotated tags (`-a`) not lightweight tags
+- Include meaningful release notes
+- Reference the commit SHA
+- Mention major features/fixes
+
+---
+
+### **Step 13: Push Commits and Tags**
+
+Push your changes to the remote repository:
+
+```bash
+git push origin feature/web-gui-2 --tags
+```
+
+**Expected output:**
+```
+Enumerating objects: 5, done.
+Counting objects: 100% (5/5), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (3/3), done.
+Writing objects: 100% (3/3), 456 bytes | 456.00 KiB/s, done.
+Total 3 (delta 2), reused 0 (delta 0), pack-reused 0
+To github.com:yourusername/bbtec-mdm.git
+   abc1234..def5678  feature/web-gui-2 -> feature/web-gui-2
+ * [new tag]         android-v0.0.45 -> android-v0.0.45
+```
+
+**Important:** The `--tags` flag pushes both commits AND tags!
+
+**What happens now:**
+- ✅ Your feature branch is backed up on GitHub
+- ✅ Tag is visible to all team members
+- ✅ Ready to create PR to `development`
 
 ---
 
 ## Summary: What You Built
 
+**For Local Debug Build:**
 ```
 ✅ APK Built:     app/build/outputs/apk/local/debug/app-local-debug.apk
-✅ Version:       0.0.43-local (versionCode 43)
+✅ Version:       0.0.45-local (versionCode 45)
 ✅ Package:       com.bbtec.mdm.client
-✅ Git Commit:    [Your commit SHA]
-✅ Git Branch:    [Your branch name]
-✅ Build Time:    [ISO 8601 timestamp]
+✅ Git Commit:    c166445
+✅ Git Branch:    feature/web-gui-2
+✅ Build Time:    2025-11-14T10:30:15Z
 ✅ Signing:       v2 (debug keystore)
 ✅ Size:          ~15 MB
-✅ Git Tag:       android-v0.0.43
+✅ Archived:      artifacts/apks/local/app-local-debug-0.0.45-c166445.apk
+✅ Git Tag:       android-v0.0.45
 ```
+
+**For Staging Release Build:**
+```
+✅ APK Built:     app/build/outputs/apk/staging/release/app-staging-release.apk
+✅ Version:       0.0.45-staging (versionCode 45)
+✅ Package:       com.bbtec.mdm.client.staging
+✅ Git Commit:    c166445
+✅ Git Branch:    feature/web-gui-2
+✅ Build Time:    2025-11-14T10:30:15Z
+✅ Signing:       v2 (release keystore)
+✅ Size:          ~12 MB
+✅ Archived:      artifacts/apks/staging/app-staging-release-0.0.45-c166445.apk
+✅ Git Tag:       android-v0.0.45
+✅ Convex:        Deployed to kindly-mule-339 (dev)
+```
+
+**For Production Release Build:**
+```
+✅ APK Built:     app/build/outputs/apk/production/release/app-production-release.apk
+✅ Version:       0.0.45 (versionCode 45)
+✅ Package:       com.bbtec.mdm.client
+✅ Git Commit:    c166445
+✅ Git Branch:    master
+✅ Build Time:    2025-11-14T10:30:15Z
+✅ Signing:       v2 (release keystore)
+✅ Size:          ~12 MB
+✅ Archived:      artifacts/apks/production/app-production-release-0.0.45-c166445.apk
+✅ Git Tag:       android-v0.0.45
+✅ Convex:        Deployed to expert-lemur-691 (prod)
+```
+
+---
+
+## Complete Release Workflows
+
+Here are three integrated workflows for different scenarios:
+
+### **Workflow 1: Local Testing (Fast Iteration)**
+
+**When to use:** Quick testing on USB-connected device during development.
+
+```bash
+# 1. Navigate to project
+cd /home/ben/sandbox/bbtec-mdm/android-client
+
+# 2. Check version (should already be bumped)
+grep -E "versionCode|versionName" app/build.gradle.kts | head -2
+
+# 3. Build APK
+./gradlew clean assembleLocalDebug
+
+# 4. Verify build
+ls -lh app/build/outputs/apk/local/debug/app-local-debug.apk
+
+# 5. Install on device
+adb devices
+adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
+
+# 6. Setup port forwarding (REQUIRED!)
+adb reverse tcp:3000 tcp:3000
+
+# 7. Test the app
+adb shell am start -n com.bbtec.mdm.client/.MainActivity
+```
+
+**Notes:**
+- ❌ No Convex deployment needed (uses local Convex)
+- ❌ No git commit/tag needed (work in progress)
+- ❌ No archive needed (temporary build)
+- ✅ Port forwarding required every time you disconnect device!
+
+---
+
+### **Workflow 2: Staging Release (QA Testing)**
+
+**When to use:** Testing against cloud staging environment before production.
+
+```bash
+# 1. Navigate to project root
+cd /home/ben/sandbox/bbtec-mdm
+
+# 2. Check version (should already be bumped in feature branch)
+cd android-client
+grep -E "versionCode|versionName" app/build.gradle.kts | head -2
+
+# 3. Deploy Convex to dev/staging
+cd ..
+npm run convex:deploy:dev
+# ✅ Wait for: "Deployment complete!"
+
+# 4. Build staging APK
+cd android-client
+./gradlew clean assembleStagingRelease
+
+# 5. Verify build
+ls -lh app/build/outputs/apk/staging/release/app-staging-release.apk
+/opt/android-sdk/build-tools/34.0.0/aapt dump badging \
+  app/build/outputs/apk/staging/release/app-staging-release.apk | \
+  grep -E "package:|versionCode|versionName"
+
+# 6. Archive APK
+./archive-apk.sh staging
+
+# 7. Commit version bump
+cd ..
+git add android-client/app/build.gradle.kts
+git commit -m "chore: bump Android client to v0.0.45"
+
+# 8. Tag release
+git tag -a android-v0.0.45 -m "Android client v0.0.45
+
+Staging release for QA testing
+- Feature: [describe]
+- Fixes: [describe]
+"
+
+# 9. Push to GitHub
+git push origin feature/web-gui-2 --tags
+
+# 10. Create PR to development
+gh pr create --base development --head feature/web-gui-2 \
+  --title "Android v0.0.45 + [your features]" \
+  --body "See commits for details"
+
+# 11. After PR merged, deploy staging APK to dashboard
+# (Upload to enrollment/update-client page)
+```
+
+**Checklist:**
+- ✅ Convex deployed to dev
+- ✅ APK built with staging config
+- ✅ Version bumped and committed
+- ✅ Release tagged
+- ✅ Changes pushed to GitHub
+- ✅ PR created to development
+- ✅ APK uploaded to dashboard
+
+---
+
+### **Workflow 3: Production Release (Deployment)**
+
+**When to use:** Deploying to production for real device enrollment.
+
+**Prerequisites:**
+- ✅ Staging tested and approved
+- ✅ Changes merged to `development`
+- ✅ PR from `development` → `master` approved
+
+```bash
+# 1. Checkout master and pull latest
+cd /home/ben/sandbox/bbtec-mdm
+git checkout master
+git pull origin master
+
+# 2. Verify version is correct
+cd android-client
+grep -E "versionCode|versionName" app/build.gradle.kts | head -2
+# Should match what was tested in staging!
+
+# 3. Deploy Convex to production
+cd ..
+npm run convex:deploy:prod
+# ✅ Wait for: "Deployment complete!"
+
+# 4. Build production APK
+cd android-client
+./gradlew clean assembleProductionRelease
+
+# 5. Verify build extensively
+ls -lh app/build/outputs/apk/production/release/app-production-release.apk
+
+# Check package and version
+/opt/android-sdk/build-tools/34.0.0/aapt dump badging \
+  app/build/outputs/apk/production/release/app-production-release.apk | \
+  grep -E "package:|versionCode|versionName"
+# Expected: package='com.bbtec.mdm.client' versionCode='45' versionName='0.0.45'
+
+# Check build provenance
+cat app/build/generated/source/buildConfig/production/release/com/bbtec/mdm/client/BuildConfig.java | \
+  grep -E "VERSION|GIT_|BUILD_"
+
+# Verify signing
+/opt/android-sdk/build-tools/34.0.0/apksigner verify --verbose \
+  app/build/outputs/apk/production/release/app-production-release.apk | \
+  grep "Verified using"
+
+# 6. Archive APK
+./archive-apk.sh production
+
+# 7. Tag release (if not already tagged in staging)
+cd ..
+git tag -a android-v0.0.45 -m "Android client v0.0.45 - PRODUCTION
+
+Production release
+- Feature: [describe]
+- Fixes: [describe]
+
+Tested in staging: [date]
+Approved by: [name]
+"
+
+# 8. Push tag to master
+git push origin master --tags
+
+# 9. Upload production APK to dashboard
+# (Upload to enrollment/update-client page)
+
+# 10. Test production enrollment
+# (Generate QR code, factory reset device, scan, verify enrollment)
+
+# 11. Monitor production logs for 24 hours
+# (Check heartbeats, device status, no errors)
+```
+
+**Production checklist:**
+- ✅ Convex deployed to production
+- ✅ APK built with production config
+- ✅ Package name verified (`com.bbtec.mdm.client`)
+- ✅ Version verified
+- ✅ Build provenance checked
+- ✅ Signing verified
+- ✅ APK archived
+- ✅ Release tagged on master
+- ✅ APK uploaded to production dashboard
+- ✅ Enrollment tested
+- ✅ Monitoring in place
 
 ---
 
 ## Next Steps
 
-### **Install on Physical Device (Optional)**
+### **Install on Physical Device (Testing)**
 
 If you want to test on a physical device:
 
@@ -581,13 +1054,24 @@ If you want to test on a physical device:
 adb devices
 adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
 
-# Option B: Via enrollment QR code (requires web dashboard)
-# Upload APK to dashboard, generate QR code, scan with factory-reset device
+# For local builds: Setup port forwarding
+adb reverse tcp:3000 tcp:3000
+
+# Option B: Via enrollment QR code (staging/production)
+# 1. Upload APK to dashboard (enrollment/update-client)
+# 2. Generate enrollment QR code
+# 3. Factory reset device
+# 4. Scan QR code during setup
+# 5. Device downloads APK and enrolls automatically
 ```
 
 ### **Build Other Flavors**
 
 ```bash
+# Local debug (fast iteration)
+./gradlew assembleLocalDebug
+# Output: app/build/outputs/apk/local/debug/app-local-debug.apk
+
 # Staging release (for QA testing)
 ./gradlew assembleStagingRelease
 # Output: app/build/outputs/apk/staging/release/app-staging-release.apk
@@ -596,15 +1080,6 @@ adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
 ./gradlew assembleProductionRelease
 # Output: app/build/outputs/apk/production/release/app-production-release.apk
 ```
-
-### **Push to Remote (Share with Team)**
-
-```bash
-# Push commits and tags
-git push origin feature/your-branch --tags
-```
-
-**Note:** The `--tags` flag is important - it pushes both commits AND the tag!
 
 ---
 
@@ -714,39 +1189,76 @@ git status
 
 ---
 
+### **Convex deployment fails: "Invalid schema"**
+
+**Cause:** Schema validation error in Convex files.
+
+**Solution:**
+```bash
+# Check for syntax errors in convex/*.ts files
+cd /home/ben/sandbox/bbtec-mdm
+npx convex dev --local
+# Look for error messages
+```
+
+---
+
+### **APK crashes on device: "Field not found"**
+
+**Cause:** You forgot to deploy Convex schema before building APK!
+
+**Solution:**
+```bash
+# Deploy Convex first
+npm run convex:deploy:dev   # For staging
+npm run convex:deploy:prod  # For production
+
+# Then rebuild APK
+cd android-client
+./gradlew clean assembleStagingRelease
+```
+
+**Prevention:** Make Convex deployment part of your workflow (see Step 10)
+
+---
+
 ## Quick Reference Card
 
 **Full build sequence (copy-paste friendly):**
 
+### **Local Testing:**
 ```bash
-# Navigate to Android client
 cd /home/ben/sandbox/bbtec-mdm/android-client
+./gradlew clean assembleLocalDebug
+adb install -r app/build/outputs/apk/local/debug/app-local-debug.apk
+adb reverse tcp:3000 tcp:3000
+```
 
-# 1. Check current version
-grep -E "versionCode|versionName" app/build.gradle.kts | head -2
-
-# 2. Bump version (adjust numbers as needed)
-sed -i 's/versionCode = 42/versionCode = 43/' app/build.gradle.kts
-sed -i 's/versionName = "0.0.42"/versionName = "0.0.43"/' app/build.gradle.kts
-
-# 3. Clean build
-./gradlew clean
-
-# 4. Build APK
-./gradlew assembleLocalDebug
-
-# 5. Verify
-ls -lh app/build/outputs/apk/local/debug/app-local-debug.apk
-cat app/build/generated/source/buildConfig/local/debug/com/bbtec/mdm/client/BuildConfig.java | grep -E "VERSION|GIT_"
-
-# 6. Archive APK
-./archive-apk.sh local
-
-# 7. Commit and tag
+### **Staging Release:**
+```bash
+cd /home/ben/sandbox/bbtec-mdm
+npm run convex:deploy:dev
+cd android-client
+./gradlew clean assembleStagingRelease
+./archive-apk.sh staging
 cd ..
 git add android-client/app/build.gradle.kts
-git commit -m "chore: Bump Android client to v0.0.43"
-git tag -a android-v0.0.43 -m "Android client v0.0.43"
+git commit -m "chore: bump Android client to v0.0.45"
+git tag -a android-v0.0.45 -m "Staging release v0.0.45"
+git push origin feature/web-gui-2 --tags
+```
+
+### **Production Release:**
+```bash
+cd /home/ben/sandbox/bbtec-mdm
+git checkout master && git pull
+npm run convex:deploy:prod
+cd android-client
+./gradlew clean assembleProductionRelease
+./archive-apk.sh production
+cd ..
+git tag -a android-v0.0.45 -m "Production release v0.0.45"
+git push origin master --tags
 ```
 
 ---
@@ -756,12 +1268,13 @@ git tag -a android-v0.0.43 -m "Android client v0.0.43"
 - **[android-build-variants.md](android-build-variants.md)** - Complete reference for build flavors, signing, and configuration
 - **[development-setup.md](development-setup.md)** - Initial project setup and environment configuration
 - **[android-qr-provisioning.md](android-qr-provisioning.md)** - Device provisioning and QR code generation
+- **[deployment-procedures.md](deployment-procedures.md)** - Production deployment guide
 
 ---
 
-**Last Updated:** 2025-11-12
-**Tutorial Version:** 1.0
-**Tested Android Client Version:** 0.0.42
+**Last Updated:** 2025-11-14
+**Tutorial Version:** 2.0
+**Tested Android Client Version:** 0.0.45
 
 ---
 
