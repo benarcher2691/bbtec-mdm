@@ -34,14 +34,13 @@ class ServiceKickWorker(
         Log.d(TAG, "🚀 ServiceKickWorker started - attempting service restart")
 
         try {
-            // Check if service is already running
-            if (PollingService.isServiceRunning()) {
-                Log.d(TAG, "✅ Service already running - no action needed")
-                return Result.success()
-            }
+            val isServiceRunning = PollingService.isServiceRunning()
+            Log.d(TAG, "Service running flag: $isServiceRunning")
 
-            // Start the service
-            Log.d(TAG, "🔄 Starting PollingService...")
+            // ALWAYS attempt restart (don't trust the flag alone)
+            // If service is truly running, startService() is a no-op
+            // This prevents stuck state where flag=true but service is dead
+            Log.d(TAG, "🔄 Starting PollingService (safe to call even if running)...")
             PollingService.startService(applicationContext)
 
             Log.d(TAG, "✅ Service start initiated successfully")
