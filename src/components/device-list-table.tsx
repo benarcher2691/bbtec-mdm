@@ -24,15 +24,63 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Smartphone, RefreshCw, AlertCircle, Trash2, Clock, Check, X, Download, Package } from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
 import { useSearchParams, useRouter } from "next/navigation"
 import type { Id } from "../../convex/_generated/dataModel"
+
+const formatDateTime = (timestamp: number) => {
+  const date = new Date(timestamp)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day} ${hours}:${minutes}`
+}
+
+const getDeviceStatusColor = (lastHeartbeat: number) => {
+  const now = Date.now()
+  const minutesAgo = (now - lastHeartbeat) / (1000 * 60)
+
+  if (minutesAgo <= 1) {
+    // Green - last minute
+    return {
+      badge: 'bg-green-100 text-green-700',
+      dot: 'bg-green-600',
+      status: 'online'
+    }
+  } else if (minutesAgo <= 3) {
+    // Yellow - last 3 minutes
+    return {
+      badge: 'bg-yellow-100 text-yellow-700',
+      dot: 'bg-yellow-600',
+      status: 'warning'
+    }
+  } else {
+    // Red - more than 3 minutes
+    return {
+      badge: 'bg-red-100 text-red-700',
+      dot: 'bg-red-600',
+      status: 'offline'
+    }
+  }
+}
 
 export function DeviceListTable() {
   const searchParams = useSearchParams()
   const router = useRouter()
 
   const deviceId = searchParams.get('device')
+
+  // Force re-render every minute to update status colors
+  const [currentTime, setCurrentTime] = useState(Date.now())
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now())
+    }, 60000) // Update every minute
+
+    return () => clearInterval(interval)
+  }, [])
 
   // State for Install App dialog
   const [installDialogOpen, setInstallDialogOpen] = useState(false)
@@ -282,28 +330,27 @@ export function DeviceListTable() {
                 <div>
                   <dt className="text-sm font-medium">Current Status</dt>
                   <dd className="text-sm">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                      selectedDevice.status === 'online'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-700'
-                    }`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${
-                        selectedDevice.status === 'online' ? 'bg-green-600' : 'bg-gray-600'
-                      }`} />
-                      {selectedDevice.status}
-                    </span>
+                    {(() => {
+                      const statusColor = getDeviceStatusColor(selectedDevice.lastHeartbeat)
+                      return (
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusColor.badge}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${statusColor.dot}`} />
+                          {statusColor.status}
+                        </span>
+                      )
+                    })()}
                   </dd>
                 </div>
                 <div>
                   <dt className="text-sm font-medium">Last Heartbeat</dt>
                   <dd className="text-sm text-muted-foreground">
-                    {formatDistanceToNow(new Date(selectedDevice.lastHeartbeat), { addSuffix: true })}
+                    {formatDateTime(selectedDevice.lastHeartbeat)}
                   </dd>
                 </div>
                 <div>
                   <dt className="text-sm font-medium">Registered At</dt>
                   <dd className="text-sm text-muted-foreground">
-                    {new Date(selectedDevice.registeredAt).toLocaleString()}
+                    {formatDateTime(selectedDevice.registeredAt)}
                   </dd>
                 </div>
                 <div>
@@ -465,25 +512,23 @@ export function DeviceListTable() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {devices.map((device) => (
-                <tr
-                  key={device._id}
-                  className="hover:bg-slate-50 transition-colors cursor-pointer"
-                  onDoubleClick={() => handleDeviceDoubleClick(device)}
-                >
-                  {/* Status Indicator (colored dot) */}
-                  <td className="p-4">
-                    <div className="flex items-center justify-center">
-                      <div
-                        className={`h-3 w-3 rounded-full ${
-                          device.status === 'online'
-                            ? 'bg-green-500'
-                            : 'bg-gray-500'
-                        }`}
-                        title={device.status}
-                      />
-                    </div>
-                  </td>
+              {devices.map((device) => {
+                const statusColor = getDeviceStatusColor(device.lastHeartbeat)
+                return (
+                  <tr
+                    key={device._id}
+                    className="hover:bg-slate-50 transition-colors cursor-pointer"
+                    onDoubleClick={() => handleDeviceDoubleClick(device)}
+                  >
+                    {/* Status Indicator (colored dot) */}
+                    <td className="p-4">
+                      <div className="flex items-center justify-center">
+                        <div
+                          className={`h-3 w-3 rounded-full ${statusColor.dot}`}
+                          title={statusColor.status}
+                        />
+                      </div>
+                    </td>
 
                   {/* Device Info */}
                   <td className="p-4">
@@ -521,22 +566,16 @@ export function DeviceListTable() {
 
                   {/* Status Badge */}
                   <td className="p-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                      device.status === 'online'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-700'
-                    }`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${
-                        device.status === 'online' ? 'bg-green-600' : 'bg-gray-600'
-                      }`} />
-                      {device.status}
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusColor.badge}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${statusColor.dot}`} />
+                      {statusColor.status}
                     </span>
                   </td>
 
                   {/* Last Heartbeat */}
                   <td className="p-4">
                     <p className="text-sm text-muted-foreground">
-                      {formatDistanceToNow(new Date(device.lastHeartbeat), { addSuffix: true })}
+                      {formatDateTime(device.lastHeartbeat)}
                     </p>
                   </td>
 
@@ -551,7 +590,8 @@ export function DeviceListTable() {
                     </span>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>
