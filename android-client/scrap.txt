@@ -1,0 +1,6 @@
+thx. please create a folder in @docs named checklists. creat one checklist for local ->
+development, amd one for development -> production
+
+numbered items in checklists and not too much fluff (we can use the document you just updated
+for teaching). these new checklists are mainly for the ops ppl to track progress, and remind
+temselves what step they are on. does this make sense?
