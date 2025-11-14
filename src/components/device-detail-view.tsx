@@ -53,7 +53,7 @@ export function DeviceDetailView({ device, onBack }: DeviceDetailViewProps) {
   const [installing, setInstalling] = useState(false)
   const [installError, setInstallError] = useState<string | null>(null)
   const [installSuccess, setInstallSuccess] = useState(false)
-  const [pingInterval, setPingInterval] = useState<number>(15)
+  const [pingInterval, setPingInterval] = useState<number>(5)
   const [updatingInterval, setUpdatingInterval] = useState(false)
 
   const updatePingInterval = useMutation(api.deviceClients.updatePingInterval)

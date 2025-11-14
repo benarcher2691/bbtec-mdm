@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
         systemAppsDisabled: policy.systemAppsDisabled,
       },
       serverUrl: validation.serverUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://bbtec-mdm.vercel.app',
-      pingInterval: 15, // minutes
+      pingInterval: 5, // minutes
     })
   } catch (error) {
     console.error('Provisioning error:', error)
