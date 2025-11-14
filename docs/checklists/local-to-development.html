@@ -1,0 +1,143 @@
+<h1 id="local-development-checklist">Local → Development Checklist</h1>
+<p><strong>Purpose:</strong> Deploy feature branch to staging
+environment <strong>Branch:</strong> <code>feature/[name]</code> →
+<code>development</code> <strong>Environment:</strong> Staging (Vercel
+preview + Convex dev)</p>
+<hr />
+<h2 id="pre-flight">Pre-Flight</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" />1. All tests passing
+locally</label></li>
+<li><label><input type="checkbox" />2. Local dev server working
+(<code>npm run dev</code> +
+<code>npx convex dev --local</code>)</label></li>
+<li><label><input type="checkbox" />3. Git working tree clean (no
+uncommitted changes)</label></li>
+</ul>
+<hr />
+<h2 id="version-build">Version &amp; Build</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" />4. Check current
+version:</label></li>
+</ul>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> /home/ben/sandbox/bbtec-mdm/android-client</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">grep</span> <span class="at">-E</span> <span class="st">&quot;versionCode|versionName&quot;</span> app/build.gradle.kts <span class="kw">|</span> <span class="fu">head</span> <span class="at">-2</span></span></code></pre></div>
+<ul class="task-list">
+<li><label><input type="checkbox" />5. Check latest released
+version:</label></li>
+</ul>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> tag <span class="at">-l</span> <span class="st">&quot;android-v*&quot;</span> <span class="kw">|</span> <span class="fu">sort</span> <span class="at">-V</span> <span class="kw">|</span> <span class="fu">tail</span> <span class="at">-1</span></span></code></pre></div>
+<ul class="task-list">
+<li><label><input type="checkbox" />6. Bump version if needed (only if
+code version = latest tag):</label></li>
+</ul>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Example: 45 → 46</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">sed</span> <span class="at">-i</span> <span class="st">&#39;s/versionCode = 45/versionCode = 46/&#39;</span> app/build.gradle.kts</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="fu">sed</span> <span class="at">-i</span> <span class="st">&#39;s/versionName = &quot;0.0.45&quot;/versionName = &quot;0.0.46&quot;/&#39;</span> app/build.gradle.kts</span></code></pre></div>
+<ul class="task-list">
+<li><label><input type="checkbox" />7. <strong>Commit version bump
+immediately</strong> (ensures git SHA in APK matches
+source):</label></li>
+</ul>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> /home/ben/sandbox/bbtec-mdm</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> add android-client/app/build.gradle.kts</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> commit <span class="at">-m</span> <span class="st">&quot;chore: bump Android client to v0.0.XX&quot;</span></span></code></pre></div>
+<hr />
+<h2 id="deploy-backend">Deploy Backend</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" />8. Deploy Convex to
+dev:</label></li>
+</ul>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> /home/ben/sandbox/bbtec-mdm</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run convex:deploy:dev</span></code></pre></div>
+<p>Wait for: “Deployment complete!”</p>
+<hr />
+<h2 id="build-android-apk">Build Android APK</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" />9. Build staging APK:</label></li>
+</ul>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android-client</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./gradlew</span> clean assembleStagingRelease</span></code></pre></div>
+<ul class="task-list">
+<li><label><input type="checkbox" />10. Verify build:</label></li>
+</ul>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ls</span> <span class="at">-lh</span> app/build/outputs/apk/staging/release/app-staging-release.apk</span></code></pre></div>
+<p>Expected: ~12 MB file exists</p>
+<ul class="task-list">
+<li><label><input type="checkbox" />11. Archive APK:</label></li>
+</ul>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./archive-apk.sh</span> staging</span></code></pre></div>
+<hr />
+<h2 id="git-operations">Git Operations</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" />12. Tag release:</label></li>
+</ul>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> /home/ben/sandbox/bbtec-mdm</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> tag <span class="at">-a</span> android-v0.0.XX <span class="at">-m</span> <span class="st">&quot;Staging release v0.0.XX</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="st">- [Feature/fix description]</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="st">&quot;</span></span></code></pre></div>
+<ul class="task-list">
+<li><label><input type="checkbox" />13. Push to GitHub:</label></li>
+</ul>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> push origin feature/<span class="pp">[</span><span class="ss">name</span><span class="pp">]</span> <span class="at">--tags</span></span></code></pre></div>
+<hr />
+<h2 id="create-pr">Create PR</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" />14. Create PR to
+development:</label></li>
+</ul>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="ex">gh</span> pr create <span class="at">--base</span> development <span class="at">--head</span> feature/<span class="pp">[</span><span class="ss">name</span><span class="pp">]</span> <span class="dt">\</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">--title</span> <span class="st">&quot;Android v0.0.XX + [description]&quot;</span> <span class="dt">\</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">--body</span> <span class="st">&quot;See commits for details&quot;</span></span></code></pre></div>
+<p>OR: Create PR manually on GitHub</p>
+<ul class="task-list">
+<li><p><label><input type="checkbox" />15. Wait for PR review and
+approval</label></p></li>
+<li><p><label><input type="checkbox" />16. Merge PR (squash/rebase/merge
+based on team preference)</label></p></li>
+</ul>
+<hr />
+<h2 id="upload-test">Upload &amp; Test</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" />17. Upload staging APK to
+dashboard:</label>
+<ul>
+<li>Navigate to: <code>/enrollment/update-client</code></li>
+<li>Upload:
+<code>artifacts/apks/staging/app-staging-release-0.0.XX-[sha].apk</code></li>
+</ul></li>
+<li><label><input type="checkbox" />18. Test enrollment on
+staging:</label>
+<ul>
+<li>Generate QR code</li>
+<li>Factory reset test device</li>
+<li>Scan QR code</li>
+<li>Verify successful enrollment</li>
+</ul></li>
+<li><label><input type="checkbox" />19. Monitor heartbeats for 24
+hours</label></li>
+</ul>
+<hr />
+<h2 id="notes">Notes</h2>
+<p><strong>Branch after merge:</strong></p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> checkout development</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> pull</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> branch <span class="at">-d</span> feature/<span class="pp">[</span><span class="ss">name</span><span class="pp">]</span>  <span class="co"># Delete local feature branch (optional)</span></span></code></pre></div>
+<p><strong>Rollback if needed:</strong></p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> checkout android-v0.0.XX  <span class="co"># Go back to tagged version</span></span></code></pre></div>
+<hr />
+<p><strong>Last Updated:</strong> 2025-11-14</p>
