@@ -68,5 +68,7 @@ android-client/release-key.jks
 android-client/*.keystore
 android-client/keystore.properties
 *.apk
-# Exception: Allow APKs in artifacts directory
-!artifacts/**/*.apk
+
+# Artifacts directory (APK builds, releases)
+# These are built binaries and should not be version controlled
+artifacts/
