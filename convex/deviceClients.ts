@@ -104,7 +104,7 @@ export const registerDevice = mutation({
       androidVersion: args.androidVersion,
       lastHeartbeat: Date.now(),
       status: "online",
-      pingInterval: 15,
+      pingInterval: 5,  // Changed from 15 to match provisioning default and Android client default
       registeredAt: Date.now(),
       isDeviceOwner: args.isDeviceOwner,
       apiToken,
