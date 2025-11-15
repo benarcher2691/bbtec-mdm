@@ -104,7 +104,7 @@ export const registerDevice = mutation({
       androidVersion: args.androidVersion,
       lastHeartbeat: Date.now(),
       status: "online",
-      pingInterval: 5,  // Changed from 15 to match provisioning default and Android client default
+      pingInterval: 15,  // WorkManager minimum interval (v0.0.49+: WorkManager migration)
       registeredAt: Date.now(),
       isDeviceOwner: args.isDeviceOwner,
       apiToken,
@@ -213,9 +213,9 @@ export const updatePingInterval = mutation({
       throw new Error("Unauthorized")
     }
 
-    // Validate interval is between 1 and 180 minutes
-    if (args.pingInterval < 1 || args.pingInterval > 180) {
-      throw new Error("Ping interval must be between 1 and 180 minutes")
+    // Validate interval is between 15 and 180 minutes (WorkManager minimum is 15)
+    if (args.pingInterval < 15 || args.pingInterval > 180) {
+      throw new Error("Ping interval must be between 15 and 180 minutes (WorkManager minimum)")
     }
 
     const device = await ctx.db
@@ -247,9 +247,9 @@ export const updatePingIntervalFromDevice = mutation({
   handler: async (ctx, args) => {
     // No user auth check - called from API route that already validated device token
 
-    // Validate interval is between 1 and 180 minutes
-    if (args.pingInterval < 1 || args.pingInterval > 180) {
-      throw new Error("Ping interval must be between 1 and 180 minutes")
+    // Validate interval is between 15 and 180 minutes (WorkManager minimum is 15)
+    if (args.pingInterval < 15 || args.pingInterval > 180) {
+      throw new Error("Ping interval must be between 15 and 180 minutes (WorkManager minimum)")
     }
 
     const device = await ctx.db
