@@ -635,6 +635,29 @@ export const sendCommandNotification = internalAction({
 **Duration:** 1-2 days
 **Priority:** High (enables instant command delivery)
 
+### Key Enhancements (Production Reliability)
+
+This phase includes three critical enhancements for production reliability:
+
+1. **Battery Optimization Exemption (Device Owner)**
+   - Uses Device Owner privileges to programmatically exempt app from battery optimization
+   - Ensures WorkManager and FCM wake device reliably during deep sleep
+   - Applied on: boot, registration, FCM token refresh
+   - **Impact:** Prevents OEM-specific battery optimization from killing background tasks
+
+2. **FCM Token Expiry Handling**
+   - Detects stale FCM tokens (>30 days old) when heartbeat returns 401
+   - Automatically refreshes expired tokens via `FirebaseMessaging.deleteToken()` + new token request
+   - Tracks token age in `PreferencesManager` for proactive monitoring
+   - **Impact:** Prevents silent FCM delivery failures in long-running deployments
+
+3. **Command Timeout Tracking (FCM Fallback)**
+   - Schedules 5-minute timeout check after FCM send
+   - Marks commands as `fcmFailed: true` if not received within 5 minutes
+   - WorkManager fallback catches missed commands within 15 minutes
+   - Logs metrics to distinguish FCM success (<5s) vs WorkManager fallback (5-15 min)
+   - **Impact:** Provides visibility into FCM reliability, proves fallback architecture works
+
 ### 4.1 Firebase Project Setup
 
 1. **Create Firebase project:**
@@ -822,8 +845,15 @@ export const createCommand = mutation({
 
     // NEW: Trigger FCM push notification (schedule HTTP action)
     await ctx.scheduler.runAfter(0, internal.deviceCommands.sendCommandNotification, {
+      commandId,
       deviceId: args.deviceId,
       commandType: args.commandType,
+    })
+
+    // NEW: Schedule timeout check (5 minutes)
+    // If FCM fails, WorkManager will catch it within 15 minutes
+    await ctx.scheduler.runAfter(5 * 60 * 1000, internal.deviceCommands.checkCommandTimeout, {
+      commandId,
     })
 
     return commandId
@@ -833,10 +863,13 @@ export const createCommand = mutation({
 // NEW: Internal action to send FCM notification
 export const sendCommandNotification = internalAction({
   args: {
+    commandId: v.id("deviceCommands"),
     deviceId: v.string(),
     commandType: v.string(),
   },
   handler: async (ctx, args) => {
+    const fcmSentAt = Date.now()
+
     // Call Next.js API route to send FCM
     const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/fcm/send`, {
       method: 'POST',
@@ -849,10 +882,95 @@ export const sendCommandNotification = internalAction({
       }),
     })
 
-    if (!response.ok) {
+    if (response.ok) {
+      // Track FCM send timestamp
+      await ctx.runMutation(internal.deviceCommands.updateFcmSentTimestamp, {
+        commandId: args.commandId,
+        fcmSentAt,
+      })
+    } else {
       console.error('[FCM] Failed to send notification:', await response.text())
+
+      // Mark FCM as failed immediately
+      await ctx.runMutation(internal.deviceCommands.markFcmFailed, {
+        commandId: args.commandId,
+      })
     }
   },
+})
+
+// NEW: Internal mutation to update FCM sent timestamp
+export const updateFcmSentTimestamp = internalMutation({
+  args: {
+    commandId: v.id("deviceCommands"),
+    fcmSentAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.commandId, {
+      fcmSentAt: args.fcmSentAt,
+    })
+  },
+})
+
+// NEW: Internal mutation to mark FCM as failed
+export const markFcmFailed = internalMutation({
+  args: {
+    commandId: v.id("deviceCommands"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.commandId, {
+      fcmFailed: true,
+    })
+  },
+})
+
+// NEW: Internal mutation to check command timeout
+export const checkCommandTimeout = internalMutation({
+  args: {
+    commandId: v.id("deviceCommands"),
+  },
+  handler: async (ctx, args) => {
+    const command = await ctx.db.get(args.commandId)
+
+    if (!command) {
+      console.warn(`[TIMEOUT] Command ${args.commandId} not found`)
+      return
+    }
+
+    // If command is still pending after 5 minutes, log it for metrics
+    if (command.status === "pending" && !command.receivedAt) {
+      console.warn(
+        `[TIMEOUT] Command ${args.commandId} (${command.commandType}) not received after 5 minutes - FCM may have failed, WorkManager will catch it within 15 min`
+      )
+
+      // Mark as FCM failed for tracking
+      await ctx.db.patch(args.commandId, {
+        fcmFailed: true,
+      })
+    } else if (command.receivedAt) {
+      const latencyMs = command.receivedAt - command.createdAt
+      console.log(
+        `[METRICS] Command ${args.commandId} received in ${latencyMs}ms (${latencyMs < 5000 ? 'FCM success' : 'WorkManager fallback'})`
+      )
+    }
+  },
+})
+```
+
+**Update schema** to include `fcmFailed` field:
+
+```typescript
+// convex/schema.ts
+deviceCommands: defineTable({
+  // ... existing fields ...
+
+  // Latency tracking
+  createdAt: v.number(),           // When command was created
+  fcmSentAt: v.optional(v.number()), // When FCM push was sent
+  fcmFailed: v.optional(v.boolean()), // If FCM delivery failed (fallback to WorkManager)
+  receivedAt: v.optional(v.number()), // When device received command (first heartbeat check)
+  executedAt: v.optional(v.number()), // When command execution started
+  completedAt: v.optional(v.number()), // When command finished
 })
 ```
 
@@ -867,6 +985,115 @@ FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
 **Vercel Dashboard** - Add same variable to staging and production.
 
 ### 4.3 Android Client Changes
+
+#### Add Battery Optimization Exemption (Device Owner)
+
+**`android-client/app/src/main/java/com/bbtec/mdm/client/BatteryOptimizationHelper.kt`** (NEW):
+
+```kotlin
+package com.bbtec.mdm.client
+
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
+import android.util.Log
+
+/**
+ * Helper to ensure app is exempt from battery optimization
+ * Uses Device Owner privileges to programmatically exempt without user prompt
+ */
+object BatteryOptimizationHelper {
+    private const val TAG = "BatteryOptHelper"
+
+    /**
+     * Check if app is exempted from battery optimization
+     * Called on: boot, registration, FCM token refresh
+     */
+    fun ensureBatteryOptimizationExempt(context: Context) {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+
+        if (pm.isIgnoringBatteryOptimizations(context.packageName)) {
+            Log.d(TAG, "✅ Already exempt from battery optimization")
+            return
+        }
+
+        // As Device Owner, we can exempt ourselves programmatically
+        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val adminComponent = ComponentName(context, DeviceAdminReceiver::class.java)
+
+        if (dpm.isDeviceOwnerApp(context.packageName)) {
+            try {
+                // Request exemption (no user prompt for Device Owner apps)
+                val intent = Intent().apply {
+                    action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                    data = Uri.parse("package:${context.packageName}")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+
+                Log.d(TAG, "✅ Battery optimization exemption requested via Device Owner privileges")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to request battery optimization exemption", e)
+            }
+        } else {
+            Log.w(TAG, "⚠️ Not Device Owner - cannot programmatically exempt from battery optimization")
+        }
+    }
+}
+```
+
+**Update `BootReceiver.kt`** to ensure exemption on boot:
+
+```kotlin
+override fun onReceive(context: Context, intent: Intent) {
+    when (intent.action) {
+        Intent.ACTION_BOOT_COMPLETED -> {
+            Log.d(TAG, "📱 BOOT_COMPLETED - ensuring battery optimization exempt")
+
+            // Ensure battery optimization exemption (critical for WorkManager + FCM)
+            BatteryOptimizationHelper.ensureBatteryOptimizationExempt(context)
+
+            val prefsManager = PreferencesManager(context)
+            if (prefsManager.isRegistered()) {
+                val intervalMinutes = prefsManager.getPingInterval().toLong()
+                HeartbeatWorker.schedule(context, intervalMinutes)
+
+                // Optional: Start foreground service for notification
+                PollingService.startService(context)
+            }
+        }
+        // ... other cases
+    }
+}
+```
+
+**Update `DeviceRegistration.kt`** to ensure exemption after registration:
+
+```kotlin
+if (result?.success == true && result.apiToken != null) {
+    // ... existing code ...
+
+    // Ensure battery optimization exemption (critical for deep sleep reliability)
+    BatteryOptimizationHelper.ensureBatteryOptimizationExempt(context)
+
+    // Schedule WorkManager heartbeat
+    HeartbeatWorker.schedule(context, 15L)
+    HeartbeatWorker.triggerImmediate(context) // Send first heartbeat now
+
+    Log.d(TAG, "✅ Registration complete - WorkManager scheduled")
+}
+```
+
+**Add to AndroidManifest.xml:**
+
+```xml
+<!-- Battery optimization exemption (Device Owner mode) -->
+<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+```
 
 #### Update build.gradle.kts
 
@@ -983,6 +1210,9 @@ fun updateFcmToken(fcmToken: String) {
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 Log.d(TAG, "✅ FCM token updated on backend")
+
+                // Store token update timestamp for expiry tracking
+                prefsManager.setFcmTokenUpdatedAt(System.currentTimeMillis())
             } else {
                 Log.e(TAG, "❌ Failed to update FCM token: HTTP ${response.code}")
             }
@@ -991,6 +1221,73 @@ fun updateFcmToken(fcmToken: String) {
         }
     }
 }
+```
+
+**Add FCM Token Expiry Handling:**
+
+Update `sendHeartbeatSync()` to detect and refresh stale FCM tokens:
+
+```kotlin
+suspend fun sendHeartbeatSync() = withContext(Dispatchers.IO) {
+    // ... existing code ...
+
+    val response = httpClient.newCall(request).execute()
+
+    if (!response.isSuccessful) {
+        // Handle FCM token expiry (backend returns 401 if token is invalid)
+        if (response.code == 401) {
+            val fcmTokenAge = System.currentTimeMillis() - prefsManager.getFcmTokenUpdatedAt()
+            val thirtyDaysMs = 30L * 24 * 60 * 60 * 1000 // 30 days
+
+            if (fcmTokenAge > thirtyDaysMs) {
+                Log.w(TAG, "⚠️ FCM token may be stale (age: ${fcmTokenAge / (24 * 60 * 60 * 1000)} days) - refreshing")
+                refreshFcmToken()
+            }
+        }
+
+        throw IOException("Heartbeat failed: HTTP ${response.code}")
+    }
+
+    // ... existing success code ...
+}
+
+/**
+ * Force refresh FCM token (called when token is suspected to be stale)
+ */
+private fun refreshFcmToken() {
+    try {
+        FirebaseMessaging.getInstance().deleteToken().addOnCompleteListener { deleteTask ->
+            if (deleteTask.isSuccessful) {
+                Log.d(TAG, "🔑 Deleted old FCM token")
+
+                // Get new token
+                FirebaseMessaging.getInstance().token.addOnCompleteListener { getTask ->
+                    if (getTask.isSuccessful) {
+                        val newToken = getTask.result
+                        Log.d(TAG, "🔑 Got new FCM token, sending to backend")
+                        updateFcmToken(newToken)
+                    } else {
+                        Log.e(TAG, "❌ Failed to get new FCM token", getTask.exception)
+                    }
+                }
+            } else {
+                Log.e(TAG, "❌ Failed to delete old FCM token", deleteTask.exception)
+            }
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "❌ FCM token refresh failed", e)
+    }
+}
+```
+
+**Add to PreferencesManager.kt:**
+
+```kotlin
+fun getFcmTokenUpdatedAt(): Long = prefs.getLong("fcm_token_updated_at", 0L)
+fun setFcmTokenUpdatedAt(timestamp: Long) = prefs.edit().putLong("fcm_token_updated_at", timestamp).apply()
+
+fun getFcmToken(): String = prefs.getString("fcm_token", "") ?: ""
+fun setFcmToken(token: String) = prefs.edit().putString("fcm_token", token).apply()
 ```
 
 #### Update DeviceRegistration
@@ -1111,6 +1408,10 @@ export async function POST(request: NextRequest) {
 | **FCM Token Refresh** | Backend receives updated token | ⬜ |
 | **FCM Network Loss** | Queued for delivery when online | ⬜ |
 | **Battery Impact (24h)** | < 5% additional drain | ⬜ |
+| **Battery Optimization Exempt** | App shown as exempt in device settings | ⬜ |
+| **FCM Token Expiry Handling** | Token refreshes after 30+ days (simulated) | ⬜ |
+| **Command Timeout (FCM Fail)** | WorkManager catches command within 15 min | ⬜ |
+| **FCM Success Metrics** | Dashboard shows `fcmFailed: false` for instant delivery | ⬜ |
 
 ### Performance Metrics to Track
 
@@ -1118,19 +1419,139 @@ export async function POST(request: NextRequest) {
 - **Command Latency:** Time from dashboard → device execution
 - **Battery Drain:** Before/after comparison over 24 hours
 - **Network Usage:** Data consumed by heartbeats + FCM
+- **FCM Delivery Rate:** % of commands delivered via FCM (vs WorkManager fallback)
+- **FCM Token Refresh Rate:** How often tokens expire/refresh
+
+### Testing Procedures for New Enhancements
+
+#### Test 1: Battery Optimization Exemption
+
+**Objective:** Verify app is exempt from battery optimization using Device Owner privileges
+
+**Steps:**
+1. Enroll device (fresh install)
+2. Check device settings: Settings → Battery → Battery optimization
+3. Search for "BBTec MDM" app
+4. Verify status shows: "Not optimized" or "Exempt"
+5. Reboot device
+6. Re-check status (should persist)
+
+**Expected:** App is automatically exempt without user interaction
+
+**Logs to watch:**
+```
+BatteryOptHelper: ✅ Already exempt from battery optimization
+BatteryOptHelper: ✅ Battery optimization exemption requested via Device Owner privileges
+```
+
+---
+
+#### Test 2: FCM Token Expiry Handling
+
+**Objective:** Verify token refresh when backend reports stale token
+
+**Simulation Steps:**
+1. Enroll device, confirm FCM token registered
+2. Backend: Manually invalidate FCM token in Convex database (set to garbage value)
+3. Android: Manually set `fcm_token_updated_at` to 31 days ago:
+   ```kotlin
+   PreferencesManager(context).setFcmTokenUpdatedAt(
+       System.currentTimeMillis() - (31L * 24 * 60 * 60 * 1000)
+   )
+   ```
+4. Wait for next heartbeat (or trigger immediate)
+5. Observe logs for token refresh
+
+**Expected:**
+- Heartbeat fails with 401
+- Log: `⚠️ FCM token may be stale (age: 31 days) - refreshing`
+- New token requested and sent to backend
+- Next heartbeat succeeds
+
+**Logs to watch:**
+```
+ApiClient: ⚠️ FCM token may be stale (age: 31 days) - refreshing
+ApiClient: 🔑 Deleted old FCM token
+ApiClient: 🔑 Got new FCM token, sending to backend
+ApiClient: ✅ FCM token updated on backend
+```
+
+---
+
+#### Test 3: Command Timeout (FCM Fallback)
+
+**Objective:** Verify WorkManager catches commands when FCM fails
+
+**Simulation Steps:**
+1. Enroll device, confirm FCM working
+2. **Disable FCM temporarily** (one of these methods):
+   - Backend: Set device's `fcmToken` to garbage value in Convex
+   - Android: Block Firebase domain in hosts file (requires root)
+   - Simpler: Turn on Airplane mode immediately after sending command
+3. Dashboard: Send lock command
+4. Wait 5 minutes (timeout check fires)
+5. Check Convex logs for timeout warning
+6. Turn WiFi back on (or wait for next WorkManager heartbeat)
+7. Verify command executes via WorkManager fallback
+
+**Expected:**
+- FCM send fails (or is delayed)
+- After 5 min: `[TIMEOUT] Command X (lock) not received after 5 minutes - FCM may have failed`
+- Command marked `fcmFailed: true` in database
+- Within 15 min: WorkManager heartbeat fetches and executes command
+- Latency > 5 seconds (proves it was WorkManager, not FCM)
+
+**Logs to watch (Backend Convex):**
+```
+[TIMEOUT] Command abc123 (lock) not received after 5 minutes - FCM may have failed, WorkManager will catch it within 15 min
+[METRICS] Command abc123 received in 180000ms (WorkManager fallback)
+```
+
+**Logs to watch (Android):**
+```
+HeartbeatWorker: 🔔 WorkManager heartbeat execution started
+HeartbeatWorker: 📋 Found 1 pending commands - processing
+ApiClient: ✅ Command executed: lock
+```
+
+**Dashboard Verification:**
+- Command detail shows: `fcmFailed: true`
+- Latency: 5-15 minutes (proves fallback worked)
 
 ### OEM Device Testing Matrix
 
 **Purpose:** Test across multiple Android OEMs to identify device-specific quirks with deep sleep, WorkManager, and FCM.
 
-| OEM | Model | Android Version | Deep Sleep Behavior | WorkManager Reliability | FCM Wake Reliability | Notes |
-|-----|-------|----------------|---------------------|------------------------|---------------------|-------|
-| **Lenovo** | TB-X606F | 10 | ⬜ Test pending | ⬜ Test pending | ⬜ Test pending | Current test device |
-| **Hannspree** | HSG1416 | 10 | ⬜ Test pending | ⬜ Test pending | ⬜ Test pending | Available for testing |
-| **Samsung** | Galaxy Tab (any) | 11+ | ⬜ Not tested | ⬜ Not tested | ⬜ Not tested | Known: Aggressive battery optimization |
-| **Xiaomi** | Any MIUI device | 11+ | ⬜ Not tested | ⬜ Not tested | ⬜ Not tested | Known: MIUI kills background apps aggressively |
-| **Oppo/OnePlus** | Any ColorOS | 11+ | ⬜ Not tested | ⬜ Not tested | ⬜ Not tested | Known: FCM delays common |
-| **Google Pixel** | Any Pixel | 12+ | ⬜ Not tested | ⬜ Not tested | ⬜ Not tested | Reference platform (should work perfectly) |
+**⚠️ IMPORTANT - Testing Scope:**
+This is a **toy/educational project**, not a commercial MDM with unlimited testing resources. We can't cover the entire Android ecosystem!
+
+**Testing Strategy:**
+1. **Phase 1 (Initial):** Test on **available hardware only** (Android 10)
+2. **Phase 2 (Expansion):** Test on newer OS version (Android 13) with existing hardware
+3. **Phase 3 (Optional):** Expand to other OEMs/devices only if project grows or issues are reported
+
+**Available Test Devices:**
+
+| Priority | OEM | Model | Android Version | Deep Sleep | WorkManager | FCM Wake | Notes |
+|----------|-----|-------|----------------|------------|-------------|----------|-------|
+| **1 (Start Here)** | **Hannspree** | Zeus (HSG1416) | **10** | ⬜ Test pending | ⬜ Test pending | ⬜ Test pending | **PRIMARY test device** |
+| **1 (Start Here)** | **Lenovo** | Surf Pad (TB-X606F) | **10** | ⬜ Test pending | ⬜ Test pending | ⬜ Test pending | **SECONDARY test device** (older) |
+| **2 (Phase 2)** | **Hannspree** | Zeus III | **13** | ⬜ Not tested | ⬜ Not tested | ⬜ Not tested | Test newer Android behavior |
+
+**Future/Aspirational Testing (If Project Grows):**
+
+| OEM | Model | Android Version | Notes |
+|-----|-------|----------------|-------|
+| **Samsung** | Galaxy Tab (any) | 11+ | Known: Aggressive battery optimization |
+| **Xiaomi** | Any MIUI device | 11+ | Known: MIUI kills background apps aggressively |
+| **Oppo/OnePlus** | Any ColorOS | 11+ | Known: FCM delays common |
+| **Google Pixel** | Any Pixel | 12+ | Reference platform (should work perfectly) |
+
+**Realistic Expectation:**
+- ✅ We WILL test: Android 10 (Hannspree Zeus, Lenovo TB-X606F)
+- ✅ We WILL test: Android 13 (Hannspree Zeus III)
+- ⚠️ We MAY test: Other OEMs if devices become available or users report issues
+- ❌ We CANNOT test: Every Android version, OEM skin, and device variant (impossible for toy project)
 
 **Testing Protocol for Each Device:**
 
@@ -1149,16 +1570,28 @@ export async function POST(request: NextRequest) {
    - Any OEM-specific issues discovered
    - Workarounds or settings required
 
-**Priority Devices:**
-1. ✅ Lenovo TB-X606F (current test device)
-2. ✅ Hannspree HSG1416 (available)
-3. ⚠️ Samsung (high market share, aggressive optimization)
-4. ⚠️ Xiaomi (MIUI known for background app issues)
-
 **Rollout Strategy Based on Testing:**
-- Start with tested devices (Lenovo, Hannspree)
-- Gradually expand to other OEMs after validation
-- Document any device-specific workarounds in `docs/oem-compatibility.md`
+
+**Phase 1 (Week 1-2):** Android 10 Baseline
+- Test on: Hannspree Zeus (HSG1416) + Lenovo Surf Pad (TB-X606F)
+- Goal: Prove WorkManager + FCM works on Android 10
+- Document: Any quirks specific to these devices
+
+**Phase 2 (Week 3):** Android 13 Validation
+- Test on: Hannspree Zeus III (Android 13)
+- Goal: Ensure no regressions on newer Android versions
+- Document: Behavior differences between Android 10 vs 13
+
+**Phase 3 (Future):** Expand If Needed
+- Only if: Users report issues on other devices
+- Or if: Project transitions from toy to production
+- Document: Any device-specific workarounds in `docs/oem-compatibility.md`
+
+**Deployment Philosophy:**
+- ✅ **Start small:** Test on what we have
+- ✅ **Fix what breaks:** Address real issues as they arise
+- ✅ **Document everything:** Make it easy for others to debug
+- ❌ **Don't prematurely optimize:** Don't buy test devices "just in case"
 
 ---
 
@@ -1329,7 +1762,27 @@ FLOWS:
 
 ---
 
-**Document Version:** 1.0
-**Status:** Ready for Implementation
+## Document Change Log
+
+**Version 1.1** (2025-11-15)
+- Added Battery Optimization Exemption (Device Owner) to Phase 4.3
+- Added FCM Token Expiry Handling to Phase 4.3 (ApiClient updates)
+- Added Command Timeout Tracking (FCM Fallback) to Phase 4.2 (backend)
+- Added Key Enhancements summary to Phase 4 intro
+- Updated OEM Testing Matrix with realistic scope (toy project, not commercial MDM)
+- Clarified test device priorities: Start with Android 10 (Hannspree Zeus, Lenovo TB-X606F), then Android 13 (Hannspree Zeus III)
+- Added phased rollout strategy based on available hardware
+- Added "Deployment Philosophy" (start small, fix what breaks, document everything)
+
+**Version 1.0** (2025-11-15)
+- Initial implementation plan approved
+- Business accepted 15-minute heartbeat interval
+- WorkManager + FCM architecture finalized
+
+---
+
+**Document Version:** 1.1
+**Last Updated:** 2025-11-15
+**Status:** Ready for Implementation (Enhanced)
 **Approval:** Business accepted 15-minute heartbeat interval
 **Next Steps:** Begin Phase 1 (Report Revision)
