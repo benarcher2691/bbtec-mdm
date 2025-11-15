@@ -7,10 +7,6 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
-import java.util.concurrent.TimeUnit
 
 /**
  * Handles ACTION_PROVISIONING_SUCCESSFUL intent
@@ -97,8 +93,8 @@ class ProvisioningSuccessActivity : Activity() {
             Log.d(TAG, "✅ Test provisioning complete - CHECK DEVICE OWNER STATUS")
         }
 
-        // Schedule WorkManager periodic health check
-        schedulePeriodicHealthCheck()
+        // NOTE: WorkManager heartbeat is now scheduled in DeviceRegistration.registerDeviceWithToken()
+        // No need to schedule here - WorkManager is initialized during registration
 
         // Request battery optimization exemption
         requestBatteryOptimization()
@@ -113,32 +109,6 @@ class ProvisioningSuccessActivity : Activity() {
 
         // Finish this activity
         finish()
-    }
-
-    /**
-     * Schedules periodic WorkManager health check.
-     *
-     * This is the backstop that ensures PollingService stays running.
-     * - Period: 15 minutes (minimum for periodic work)
-     * - Flex window: 10 minutes (battery efficiency)
-     */
-    private fun schedulePeriodicHealthCheck() {
-        Log.d(TAG, "📅 Scheduling WorkManager periodic health check")
-
-        val healthCheckRequest = PeriodicWorkRequestBuilder<HeartbeatHealthWorker>(
-            repeatInterval = 15,
-            repeatIntervalTimeUnit = TimeUnit.MINUTES,
-            flexTimeInterval = 10,
-            flexTimeIntervalUnit = TimeUnit.MINUTES
-        ).build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "mdm-heartbeat-health-check",
-            ExistingPeriodicWorkPolicy.KEEP,
-            healthCheckRequest
-        )
-
-        Log.d(TAG, "✅ WorkManager health check scheduled")
     }
 
     /**

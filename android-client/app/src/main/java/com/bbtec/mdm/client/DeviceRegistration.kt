@@ -125,9 +125,14 @@ class DeviceRegistration(private val context: Context) {
                         Log.e(TAG, "✅ Enrollment ID and API token saved to preferences!")
                         Log.e(TAG, "✅ Registration flag set to true!")
 
-                        // Send immediate heartbeat
-                        Log.e(TAG, "🚀 Sending immediate heartbeat after DPC registration...")
-                        ApiClient(context).sendHeartbeat()
+                        // Schedule WorkManager heartbeat (v0.0.49+: WorkManager migration)
+                        val intervalMinutes = prefsManager.getPingInterval().toLong()
+                        HeartbeatWorker.schedule(context, intervalMinutes)
+                        Log.e(TAG, "📅 WorkManager heartbeat scheduled (${intervalMinutes} min interval)")
+
+                        // Trigger immediate heartbeat via WorkManager
+                        Log.e(TAG, "🚀 Triggering immediate heartbeat after DPC registration...")
+                        HeartbeatWorker.triggerImmediate(context)
                     } else {
                         Log.e(TAG, "❌ DPC registration response missing success or apiToken!")
                         Log.e(TAG, "result.success: ${result?.success}")
