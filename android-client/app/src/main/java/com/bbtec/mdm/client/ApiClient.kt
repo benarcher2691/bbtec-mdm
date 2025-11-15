@@ -321,6 +321,61 @@ class ApiClient(private val context: Context) {
         })
     }
 
+    /**
+     * Synchronous heartbeat for WorkManager (suspending function)
+     * Throws exception on failure (WorkManager will retry)
+     *
+     * @since v0.0.49 (WorkManager migration)
+     */
+    suspend fun sendHeartbeatSync() = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        val deviceId = prefsManager.getDeviceId()
+        val apiToken = prefsManager.getApiToken()
+
+        if (apiToken.isEmpty()) {
+            throw IllegalStateException("No API token - device not registered")
+        }
+
+        val requestStartMs = System.currentTimeMillis()
+
+        val json = gson.toJson(mapOf(
+            "deviceId" to deviceId,
+            "timestamp" to requestStartMs
+        ))
+
+        val request = Request.Builder()
+            .url("$baseUrl/heartbeat")
+            .header("Authorization", "Bearer $apiToken")
+            .post(json.toRequestBody("application/json".toMediaType()))
+            .build()
+
+        val response = client.newCall(request).execute()
+
+        if (!response.isSuccessful) {
+            throw IOException("Heartbeat failed: HTTP ${response.code}")
+        }
+
+        // SUCCESS - update state
+        val latencyMs = System.currentTimeMillis() - requestStartMs
+        prefsManager.setLastHeartbeat(System.currentTimeMillis())
+        stateManager.recordSuccess()
+
+        // Parse response for ping interval
+        val body = response.body?.string()
+        val result = gson.fromJson(body, HeartbeatResponse::class.java)
+        if (result?.pingInterval != null) {
+            val oldInterval = prefsManager.getPingInterval()
+            if (oldInterval != result.pingInterval) {
+                prefsManager.setPingInterval(result.pingInterval)
+                Log.d(TAG, "📊 Ping interval updated: $oldInterval → ${result.pingInterval} minutes")
+
+                // Reschedule WorkManager with new interval
+                HeartbeatWorker.schedule(context, result.pingInterval.toLong())
+            }
+        }
+
+        Log.d(TAG, "✅ Heartbeat success (latency: ${latencyMs}ms)")
+    }
+
     data class Command(
         val commandId: String,
         val action: String,

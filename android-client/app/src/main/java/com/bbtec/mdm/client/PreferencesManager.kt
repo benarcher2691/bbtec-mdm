@@ -15,7 +15,7 @@ class PreferencesManager(context: Context) {
     fun getLastHeartbeat(): Long = prefs.getLong("last_heartbeat", 0)
     fun setLastHeartbeat(timestamp: Long) = prefs.edit().putLong("last_heartbeat", timestamp).apply()
 
-    fun getPingInterval(): Int = prefs.getInt("ping_interval", 5) // Default 5 minutes
+    fun getPingInterval(): Int = prefs.getInt("ping_interval", 15) // Default 15 minutes (WorkManager minimum)
     fun setPingInterval(minutes: Int) = prefs.edit().putInt("ping_interval", minutes).apply()
 
     fun getApiToken(): String = prefs.getString("api_token", "") ?: ""

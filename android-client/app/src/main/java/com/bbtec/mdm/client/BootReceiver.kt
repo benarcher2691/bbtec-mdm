@@ -4,10 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
-import java.util.concurrent.TimeUnit
 
 /**
  * Handles system broadcasts to ensure service resilience.
@@ -17,9 +13,12 @@ import java.util.concurrent.TimeUnit
  * - MY_PACKAGE_REPLACED: App updated/reinstalled
  * - USER_UNLOCKED: User unlocked device (Direct Boot)
  *
- * Actions:
- * - Start PollingService
- * - Reschedule WorkManager periodic health check (survives app updates)
+ * Actions (v0.0.49+):
+ * - Schedule WorkManager heartbeat (survives deep sleep, app updates, reboots)
+ * - Start PollingService (optional foreground notification)
+ *
+ * @since v0.0.1 (original implementation)
+ * @since v0.0.49 (WorkManager migration)
  */
 class BootReceiver : BroadcastReceiver() {
 
@@ -30,24 +29,49 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED -> {
-                Log.d(TAG, "📱 BOOT_COMPLETED received - starting service and scheduling WorkManager")
-                startService(context)
-                schedulePeriodicHealthCheck(context)
+                Log.d(TAG, "📱 BOOT_COMPLETED - scheduling WorkManager heartbeat")
+
+                val prefsManager = PreferencesManager(context)
+                if (prefsManager.isRegistered()) {
+                    val intervalMinutes = prefsManager.getPingInterval().toLong()
+                    HeartbeatWorker.schedule(context, intervalMinutes)
+
+                    // Optional: Start foreground service for notification
+                    PollingService.startService(context)
+
+                    Log.d(TAG, "✅ WorkManager scheduled (${intervalMinutes} min interval)")
+                } else {
+                    Log.d(TAG, "⚠️ Device not registered yet - skipping WorkManager schedule")
+                }
             }
 
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                Log.d(TAG, "📦 MY_PACKAGE_REPLACED received - app updated, rescheduling WorkManager")
-                // Service should already be running, but reschedule WorkManager to be safe
-                schedulePeriodicHealthCheck(context)
-                // Optionally restart service to pick up any service changes
-                startService(context)
+                Log.d(TAG, "📦 MY_PACKAGE_REPLACED - rescheduling WorkManager after app update")
+
+                val prefsManager = PreferencesManager(context)
+                if (prefsManager.isRegistered()) {
+                    val intervalMinutes = prefsManager.getPingInterval().toLong()
+                    HeartbeatWorker.schedule(context, intervalMinutes)
+
+                    // Restart service to pick up any service changes
+                    PollingService.startService(context)
+
+                    Log.d(TAG, "✅ WorkManager rescheduled after app update")
+                } else {
+                    Log.d(TAG, "⚠️ Device not registered yet - skipping WorkManager schedule")
+                }
             }
 
             Intent.ACTION_USER_UNLOCKED -> {
-                Log.d(TAG, "🔓 USER_UNLOCKED received - user unlocked device")
-                // Start service if not already running (Direct Boot scenario)
-                if (!PollingService.isServiceRunning()) {
-                    startService(context)
+                Log.d(TAG, "🔓 USER_UNLOCKED - checking if WorkManager needs scheduling")
+
+                val prefsManager = PreferencesManager(context)
+                if (prefsManager.isRegistered()) {
+                    // Ensure WorkManager is scheduled (Direct Boot scenario)
+                    val intervalMinutes = prefsManager.getPingInterval().toLong()
+                    HeartbeatWorker.schedule(context, intervalMinutes)
+
+                    PollingService.startService(context)
                 }
             }
 
@@ -55,37 +79,5 @@ class BootReceiver : BroadcastReceiver() {
                 Log.w(TAG, "⚠️ Unknown broadcast action: ${intent.action}")
             }
         }
-    }
-
-    private fun startService(context: Context) {
-        Log.d(TAG, "🚀 Starting PollingService")
-        PollingService.startService(context)
-    }
-
-    /**
-     * Schedules periodic WorkManager health check.
-     *
-     * Configuration:
-     * - Period: 15 minutes (minimum for periodic work)
-     * - Flex window: 10 minutes (allows system batching for battery efficiency)
-     * - Policy: KEEP (don't recreate if already exists)
-     */
-    private fun schedulePeriodicHealthCheck(context: Context) {
-        Log.d(TAG, "📅 Scheduling periodic health check (15min + 10min flex)")
-
-        val healthCheckRequest = PeriodicWorkRequestBuilder<HeartbeatHealthWorker>(
-            repeatInterval = 15,
-            repeatIntervalTimeUnit = TimeUnit.MINUTES,
-            flexTimeInterval = 10,
-            flexTimeIntervalUnit = TimeUnit.MINUTES
-        ).build()
-
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            "mdm-heartbeat-health-check",
-            ExistingPeriodicWorkPolicy.KEEP,  // Don't recreate if exists
-            healthCheckRequest
-        )
-
-        Log.d(TAG, "✅ WorkManager health check scheduled")
     }
 }
