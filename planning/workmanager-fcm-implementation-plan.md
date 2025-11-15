@@ -16,6 +16,8 @@ This plan implements the approved architecture for reliable device heartbeats an
 
 **Key Decision:** Business accepts 15-minute heartbeat interval, enabling simpler WorkManager-only implementation.
 
+**Fallback Architecture:** WorkManager acts as safety net for FCM. If FCM fails (token expired, device offline, network issues), WorkManager heartbeat within 15 minutes will detect and execute pending commands. Maximum command delay: 15 minutes (acceptable per business decision).
+
 ---
 
 ## Phase 1: Revise Investigation Report ✅
@@ -406,7 +408,216 @@ Register the new worker:
 </provider>
 ```
 
-### 3.5 Testing Checklist
+### 3.5 Add Metrics & Telemetry
+
+**Duration:** 1-2 hours
+**Priority:** Critical for monitoring production reliability
+
+#### Backend Changes (Convex Schema)
+
+Add telemetry fields to `deviceClients` table:
+
+```typescript
+// convex/schema.ts
+deviceClients: defineTable({
+  // ... existing fields ...
+
+  // Telemetry fields (NEW)
+  lastHeartbeatSuccess: v.optional(v.number()), // Timestamp of last successful heartbeat
+  lastFcmReceived: v.optional(v.number()),      // Timestamp of last FCM message received
+  heartbeatFailureCount: v.optional(v.number()), // Consecutive failures (reset on success)
+  fcmTokenUpdatedAt: v.optional(v.number()),     // When FCM token last refreshed
+})
+```
+
+Add command latency tracking to `deviceCommands` table:
+
+```typescript
+// convex/schema.ts
+deviceCommands: defineTable({
+  // ... existing fields ...
+
+  // Latency tracking (NEW)
+  createdAt: v.number(),           // When command was created
+  fcmSentAt: v.optional(v.number()), // When FCM push was sent
+  receivedAt: v.optional(v.number()), // When device received command (first heartbeat check)
+  executedAt: v.optional(v.number()), // When command execution started
+  completedAt: v.optional(v.number()), // When command finished
+})
+```
+
+#### Update ApiClient to Report Metrics
+
+**`ApiClient.kt`** - Update heartbeat to include metrics:
+
+```kotlin
+suspend fun sendHeartbeatSync() = withContext(Dispatchers.IO) {
+    // ... existing code ...
+
+    val heartbeatJson = buildHeartbeatJson(deviceId)
+
+    // Add metrics to heartbeat payload
+    val metrics = mapOf(
+        "lastFcmReceived" to prefsManager.getLastFcmReceived(),
+        "heartbeatFailureCount" to 0  // Reset on success
+    )
+
+    // ... send request ...
+
+    if (response.isSuccessful) {
+        // Record success timestamp
+        prefsManager.setLastHeartbeatSuccess(System.currentTimeMillis())
+        prefsManager.setHeartbeatFailureCount(0)
+    } else {
+        // Increment failure count
+        val failures = prefsManager.getHeartbeatFailureCount() + 1
+        prefsManager.setHeartbeatFailureCount(failures)
+    }
+}
+```
+
+#### Update FcmMessagingService to Track FCM Receipt
+
+```kotlin
+override fun onMessageReceived(message: RemoteMessage) {
+    super.onMessageReceived(message)
+
+    // Track FCM receipt timestamp
+    PreferencesManager(this).setLastFcmReceived(System.currentTimeMillis())
+
+    Log.d(TAG, "📬 FCM message received: ${message.data}")
+    // ... existing code ...
+}
+```
+
+#### Add PreferencesManager Methods
+
+```kotlin
+// PreferencesManager.kt - Add new methods:
+
+fun getLastHeartbeatSuccess(): Long = prefs.getLong("last_heartbeat_success", 0L)
+fun setLastHeartbeatSuccess(timestamp: Long) = prefs.edit().putLong("last_heartbeat_success", timestamp).apply()
+
+fun getLastFcmReceived(): Long = prefs.getLong("last_fcm_received", 0L)
+fun setLastFcmReceived(timestamp: Long) = prefs.edit().putLong("last_fcm_received", timestamp).apply()
+
+fun getHeartbeatFailureCount(): Int = prefs.getInt("heartbeat_failure_count", 0)
+fun setHeartbeatFailureCount(count: Int) = prefs.edit().putInt("heartbeat_failure_count", count).apply()
+```
+
+#### Update Backend to Store Metrics
+
+**`convex/deviceClients.ts`** - Update heartbeat mutation:
+
+```typescript
+export const updateHeartbeat = mutation({
+  args: {
+    deviceId: v.string(),
+    lastFcmReceived: v.optional(v.number()),
+    heartbeatFailureCount: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const device = await ctx.db
+      .query("deviceClients")
+      .withIndex("by_device", (q) => q.eq("deviceId", args.deviceId))
+      .first()
+
+    if (device) {
+      await ctx.db.patch(device._id, {
+        lastHeartbeat: Date.now(),
+        lastHeartbeatSuccess: Date.now(), // NEW
+        status: "online",
+        lastFcmReceived: args.lastFcmReceived || device.lastFcmReceived, // NEW
+        heartbeatFailureCount: args.heartbeatFailureCount || 0, // NEW
+      })
+    }
+  },
+})
+```
+
+#### Dashboard Metrics Display
+
+Add metrics to device detail view:
+
+```typescript
+// src/components/device-detail.tsx (or similar)
+
+<div className="metrics-section">
+  <h3>Reliability Metrics</h3>
+
+  <div className="metric">
+    <span>Last Heartbeat Success:</span>
+    <span>{formatTimestamp(device.lastHeartbeatSuccess)}</span>
+  </div>
+
+  <div className="metric">
+    <span>Last FCM Received:</span>
+    <span>{device.lastFcmReceived ? formatTimestamp(device.lastFcmReceived) : 'Never'}</span>
+  </div>
+
+  <div className="metric">
+    <span>Heartbeat Health:</span>
+    <span className={device.heartbeatFailureCount > 3 ? 'warning' : 'success'}>
+      {device.heartbeatFailureCount} consecutive failures
+    </span>
+  </div>
+
+  <div className="metric">
+    <span>FCM Token Status:</span>
+    <span>{device.fcmToken ? '✅ Registered' : '⚠️ Missing'}</span>
+  </div>
+</div>
+```
+
+#### Command Latency Tracking
+
+Track command delivery times:
+
+```typescript
+// convex/deviceCommands.ts - Update createCommand:
+
+export const createCommand = mutation({
+  // ... existing args ...
+  handler: async (ctx, args) => {
+    const commandId = await ctx.db.insert("deviceCommands", {
+      deviceId: args.deviceId,
+      commandType: args.commandType,
+      parameters: args.parameters,
+      status: "pending",
+      createdAt: Date.now(), // Track creation time
+    })
+
+    // Send FCM
+    await ctx.scheduler.runAfter(0, internal.deviceCommands.sendCommandNotification, {
+      commandId,
+      deviceId: args.deviceId,
+      commandType: args.commandType,
+    })
+
+    return commandId
+  },
+})
+
+// Update sendCommandNotification to track FCM send time:
+export const sendCommandNotification = internalAction({
+  handler: async (ctx, args) => {
+    const fcmSentAt = Date.now()
+
+    // Send FCM push
+    const response = await fetch(/* ... */)
+
+    if (response.ok) {
+      // Update command with FCM sent timestamp
+      await ctx.runMutation(internal.deviceCommands.updateFcmSentTimestamp, {
+        commandId: args.commandId,
+        fcmSentAt,
+      })
+    }
+  },
+})
+```
+
+### 3.6 Testing Checklist
 
 - [ ] Build succeeds (no compilation errors)
 - [ ] Deep sleep test: Device pings every 15 minutes with screen off
@@ -414,6 +625,8 @@ Register the new worker:
 - [ ] Interval update test: Changing interval reschedules WorkManager
 - [ ] Network disruption test: WorkManager retries with exponential backoff
 - [ ] Battery test: Monitor drain over 24 hours
+- [ ] **Metrics test:** Dashboard shows lastHeartbeatSuccess, lastFcmReceived
+- [ ] **Latency test:** Command latency calculated correctly (createdAt → executedAt)
 
 ---
 
@@ -906,6 +1119,47 @@ export async function POST(request: NextRequest) {
 - **Battery Drain:** Before/after comparison over 24 hours
 - **Network Usage:** Data consumed by heartbeats + FCM
 
+### OEM Device Testing Matrix
+
+**Purpose:** Test across multiple Android OEMs to identify device-specific quirks with deep sleep, WorkManager, and FCM.
+
+| OEM | Model | Android Version | Deep Sleep Behavior | WorkManager Reliability | FCM Wake Reliability | Notes |
+|-----|-------|----------------|---------------------|------------------------|---------------------|-------|
+| **Lenovo** | TB-X606F | 10 | ⬜ Test pending | ⬜ Test pending | ⬜ Test pending | Current test device |
+| **Hannspree** | HSG1416 | 10 | ⬜ Test pending | ⬜ Test pending | ⬜ Test pending | Available for testing |
+| **Samsung** | Galaxy Tab (any) | 11+ | ⬜ Not tested | ⬜ Not tested | ⬜ Not tested | Known: Aggressive battery optimization |
+| **Xiaomi** | Any MIUI device | 11+ | ⬜ Not tested | ⬜ Not tested | ⬜ Not tested | Known: MIUI kills background apps aggressively |
+| **Oppo/OnePlus** | Any ColorOS | 11+ | ⬜ Not tested | ⬜ Not tested | ⬜ Not tested | Known: FCM delays common |
+| **Google Pixel** | Any Pixel | 12+ | ⬜ Not tested | ⬜ Not tested | ⬜ Not tested | Reference platform (should work perfectly) |
+
+**Testing Protocol for Each Device:**
+
+1. **Deep Sleep Test** (30 min, screen off):
+   - Expected: 2 heartbeats (0 min, 15 min)
+   - Record: Actual heartbeat count, any delays
+
+2. **FCM Wake Test** (device asleep):
+   - Send lock command from dashboard
+   - Record: Time to execution, any failures
+
+3. **Battery Test** (24 hours, mixed usage):
+   - Record: Battery drain %, WorkManager execution count
+
+4. **Known Quirks Documentation:**
+   - Any OEM-specific issues discovered
+   - Workarounds or settings required
+
+**Priority Devices:**
+1. ✅ Lenovo TB-X606F (current test device)
+2. ✅ Hannspree HSG1416 (available)
+3. ⚠️ Samsung (high market share, aggressive optimization)
+4. ⚠️ Xiaomi (MIUI known for background app issues)
+
+**Rollout Strategy Based on Testing:**
+- Start with tested devices (Lenovo, Hannspree)
+- Gradually expand to other OEMs after validation
+- Document any device-specific workarounds in `docs/oem-compatibility.md`
+
 ---
 
 ## Phase 6: Documentation Updates
@@ -932,6 +1186,12 @@ export async function POST(request: NextRequest) {
 4. **`docs/android-build-tutorial.md`:**
    - Add `google-services.json` setup step
    - Document Firebase plugin requirement
+
+5. **`docs/oem-compatibility.md`** (NEW):
+   - OEM device testing results
+   - Known quirks and workarounds
+   - Recommended settings for problematic OEMs
+   - Battery optimization exemption instructions per manufacturer
 
 ---
 
@@ -970,10 +1230,17 @@ export async function POST(request: NextRequest) {
 - [x] Lock/wipe commands execute instantly via FCM
 - [x] FCM token registration working for all devices
 
+### Must Have (Phase 3.5 - Metrics):
+- [x] Dashboard displays `lastHeartbeatSuccess` and `lastFcmReceived` timestamps
+- [x] Command latency tracking (createdAt → executedAt)
+- [x] Heartbeat failure count visible in dashboard
+- [x] FCM token registration status visible
+
 ### Nice to Have:
-- [ ] Dashboard shows "last command latency" metric
+- [ ] Command latency histogram (dashboard analytics)
 - [ ] Admin can manually trigger push test
 - [ ] FCM delivery receipts logged
+- [ ] Alerting when device heartbeat failures > 5
 
 ---
 
@@ -984,11 +1251,18 @@ export async function POST(request: NextRequest) {
 | Phase 1: Report Revision | 30 min | None |
 | Phase 2: Deploy Fix | 15 min | Phase 1 |
 | Phase 3: WorkManager | 3-4 hours | Phase 2 |
-| Phase 4: FCM Integration | 1-2 days | Phase 3 complete |
-| Phase 5: Testing | 2-3 days | Phase 4 complete |
+| Phase 3.5: Metrics & Telemetry | 1-2 hours | Phase 3 |
+| Phase 4: FCM Integration | 1-2 days | Phase 3.5 complete |
+| Phase 5: Testing + OEM Matrix | 2-3 days | Phase 4 complete |
 | Phase 6: Documentation | 2-3 hours | Phase 5 complete |
 
 **Total: 4-6 days** (assuming 1 developer working sequentially)
+
+**Breakdown:**
+- Day 1: Phases 1-3 (WorkManager migration + metrics)
+- Days 2-3: Phase 4 (FCM integration)
+- Days 4-6: Phase 5 (Testing across OEMs)
+- Day 6: Phase 6 (Documentation)
 
 **Parallel work possible:** Backend FCM (Phase 4.2) can start while Android WorkManager (Phase 3) is being tested.
 
